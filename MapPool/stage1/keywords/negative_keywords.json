@@ -2401,5 +2401,17 @@
   "subúrbios": -0.5,
   "forsteder": -0.5,
   "voorstede": -0.5,
-  "vùng ngoại ô": -0.5
+  "vùng ngoại ô": -0.5,
+  "gif": -2.0,
+  "quiz game": -1.0,
+  "diagram dodge": -2.0,
+  "pictures": -3.0,
+  "picture": -3.0,
+  "location point": -1.0,
+  "wiring diagram": -3.0,
+  "engine": -2.0,
+  "motor": -1.0,
+  "screen": -1.0,
+  "town names": -1.0,
+  "seating chart": -2.0
 }
