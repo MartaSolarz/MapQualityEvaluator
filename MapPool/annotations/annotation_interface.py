@@ -95,10 +95,26 @@ def get_annotation_stats(annotations):
     stats = {'TAK': 0, 'NIE': 0, 'INVALID': 0}
     for ann in annotations.values():
         label = ann['label']
-        if label in stats:
-            stats[label] += 1
+        if label in ['TAK', 'YES']:
+            stats['TAK'] += 1
+        elif label in ['NIE', 'NO']:
+            stats['NIE'] += 1
+        elif label == 'INVALID':
+            stats['INVALID'] += 1
     return stats
 
+
+def calculate_bin_distribution_from_annotations(df, annotations):
+    bin_counts = {}
+
+    for uid, ann in annotations.items():
+        if ann['label'] in ['TAK', 'NIE', 'YES', 'NO']:
+            sample_row = df[df['uid'] == uid]
+            if len(sample_row) > 0:
+                score_bin = sample_row.iloc[0]['score_bin']
+                bin_counts[score_bin] = bin_counts.get(score_bin, 0) + 1
+
+    return bin_counts
 
 import random
 
@@ -128,7 +144,6 @@ def get_next_sample(df, annotations):
     return sample
 
 
-
 if 'annotations' not in st.session_state:
     st.session_state.annotations = load_annotations()
 
@@ -151,8 +166,17 @@ total_samples_to_annotate = st.session_state.target_annotations
 bin_proportions = {b: c / sum(bin_counts.values()) for b, c in bin_counts.items()}
 
 if 'bin_remaining' not in st.session_state:
-    st.session_state.bin_remaining = {b: int(total_samples_to_annotate * p) for b, p in bin_proportions.items()}
+    already_annotated_bins = calculate_bin_distribution_from_annotations(
+        st.session_state.data,
+        st.session_state.annotations
+    )
 
+    st.session_state.bin_remaining = {}
+    for bin_name, proportion in bin_proportions.items():
+        target_for_bin = int(total_samples_to_annotate * proportion)
+        already_done = already_annotated_bins.get(bin_name, 0)
+        remaining = max(0, target_for_bin - already_done)
+        st.session_state.bin_remaining[bin_name] = remaining
 
 stats = get_annotation_stats(st.session_state.annotations)
 valid_annotations = stats['TAK'] + stats['NIE']
@@ -283,6 +307,20 @@ with st.sidebar:
 
     if total_annotations > 0:
         st.write(f"**% INVALID:** {stats['INVALID'] / total_annotations * 100:.1f}%")
+
+    st.markdown("---")
+
+    st.subheader("🎯 Rozkład binów")
+    already_annotated_bins = calculate_bin_distribution_from_annotations(
+        st.session_state.data,
+        st.session_state.annotations
+    )
+
+    for bin_name in sorted(st.session_state.bin_remaining.keys()):
+        done = already_annotated_bins.get(bin_name, 0)
+        remaining = st.session_state.bin_remaining.get(bin_name, 0)
+        total_for_bin = done + remaining
+        st.write(f"**{bin_name}:** {done}/{total_for_bin} (pozostało: {remaining})")
 
     st.markdown("---")
     st.write(f"**Plik zapisu:** `{ANNOTATIONS_FILE}`")
