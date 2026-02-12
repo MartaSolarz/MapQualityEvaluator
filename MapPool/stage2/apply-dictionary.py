@@ -18,7 +18,7 @@ OUTPUT_FOLDER = "./processed"
 BATCH_SIZE = 1000
 MAX_WORKERS = 10
 REPO_ID = "sraimund/MapPool"
-TOKEN = ""
+TOKEN="REDACTED_HF_TOKEN"
 
 file_locks = {}
 batch_counters = {}
@@ -211,17 +211,18 @@ if __name__ == "__main__":
         A.add_word(phrase.lower(), ("neg", phrase, value))
     A.make_automaton()
 
-    with open("all.json") as f:
-        file_list_json = json.load(f)
-
-    if args.parts and args.parts.lower() != 'all':
-        selected_parts = [f"part_{p.strip()}" for p in args.parts.split(',')]
-        file_list_json = {k: v for k, v in file_list_json.items() if k in selected_parts}
-        print(f"🎯 Przetwarzanie wybranych partów: {', '.join(selected_parts)}")
-    else:
-        print(f"🎯 Przetwarzanie wszystkich partów: {', '.join(file_list_json.keys())}")
-    
-    all_files = [(part, file_name) for part, files in file_list_json.items() for file_name in files]
+    # with open("all.json") as f:
+    #     file_list_json = json.load(f)
+    #
+    # if args.parts and args.parts.lower() != 'all':
+    #     selected_parts = [f"part_{p.strip()}" for p in args.parts.split(',')]
+    #     file_list_json = {k: v for k, v in file_list_json.items() if k in selected_parts}
+    #     print(f"🎯 Przetwarzanie wybranych partów: {', '.join(selected_parts)}")
+    # else:
+    #     print(f"🎯 Przetwarzanie wszystkich partów: {', '.join(file_list_json.keys())}")
+    #
+    all_files = [("part_6", "3dd3ef060d4129217e3f13edccfdcc30"), ("part_6", "3dd64ee426966e61287cd679a478f755"), ("part_6", "3df907381424eb332d669c8ce9f8e7e4"), ("part_6", "3e031defe480c616a1ed6dc79ed0f6ab"), ("part_6", "3e181ef1bc9f936b202c870029a7b478"), ("part_6", "3e2c66137a12bed41f3d310e100cebd1"), ("part_6", "3e38e6368b4ba253ad6a0a54cdc1c7f8"), ("part_6", "3e41174df75dbed49bbb299eda0b3fe4"), ("part_6", "3e48cc76567cac6aa278edd10e625c8f"), ("part_6", "3e031defe480c616a1ed6dc79ed0f6ab"), ("part_6", "3e181ef1bc9f936b202c870029a7b478"), ("part_6", "3e554dc09d37c8ad4897b3a789166a1d"), ("part_6", "3e6e5ee9841b72ba0f22a9ffd9c51390"), ("part_6", "3e6118df3c330f5a09b6ef19ecf25b47"), ("part_6", "3e59895c7e2843ba2638b00f070f8499")]
+    # all_files = [(part, file_name) for part, files in file_list_json.items() for file_name in files]
     total_files = len(all_files)
     print(f"Znaleziono {total_files} plików do przetworzenia.")
 
