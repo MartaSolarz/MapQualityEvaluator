@@ -107,7 +107,7 @@ def get_annotation_stats(annotations):
 def calculate_bin_distribution_from_annotations(df, annotations):
     bin_counts = {}
 
-    for uid, ann in annotations.items():
+    for uid, ann in list(annotations.items()):
         if ann['label'] in ['TAK', 'NIE', 'YES', 'NO']:
             sample_row = df[df['uid'] == uid]
             if len(sample_row) > 0:
@@ -172,11 +172,23 @@ if 'bin_remaining' not in st.session_state:
     )
 
     st.session_state.bin_remaining = {}
+
+    bin_targets = {}
     for bin_name, proportion in bin_proportions.items():
-        target_for_bin = int(total_samples_to_annotate * proportion)
+        bin_targets[bin_name] = round(total_samples_to_annotate * proportion)
+
+    total_allocated = sum(bin_targets.values())
+    diff = total_samples_to_annotate - total_allocated
+    if diff != 0:
+        largest_bin = max(bin_targets.keys(), key=lambda b: bin_targets[b])
+        bin_targets[largest_bin] += diff
+
+    for bin_name in bin_targets.keys():
+        target_for_bin = bin_targets[bin_name]
         already_done = already_annotated_bins.get(bin_name, 0)
         remaining = max(0, target_for_bin - already_done)
         st.session_state.bin_remaining[bin_name] = remaining
+        print(f"Bin {bin_name}: target={target_for_bin}, already_done={already_done}, remaining={remaining}")
 
 stats = get_annotation_stats(st.session_state.annotations)
 valid_annotations = stats['TAK'] + stats['NIE']
@@ -255,7 +267,7 @@ if not st.session_state.url_checked:
                     st.session_state.current_image = img
 
 if st.session_state.current_image is not None:
-    st.image(st.session_state.current_image, caption=f"Score: {sample['score']}", use_container_width=True)
+    st.image(st.session_state.current_image, caption=f"Score: {sample['score']}", width="stretch")
 
     st.markdown("---")
 
@@ -264,7 +276,7 @@ if st.session_state.current_image is not None:
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        if st.button("✅ TAK (Y)", key="yes_btn", use_container_width=True, type="primary"):
+        if st.button("✅ TAK (Y)", key="yes_btn", width="stretch", type="primary"):
             save_annotation(sample['uid'], 'YES')
             st.session_state.annotations[sample['uid']] = {
                 'uid': sample['uid'],
@@ -274,7 +286,7 @@ if st.session_state.current_image is not None:
             st.rerun()
 
     with col2:
-        if st.button("❌ NIE (N)", key="no_btn", use_container_width=True):
+        if st.button("❌ NIE (N)", key="no_btn", width="stretch"):
             save_annotation(sample['uid'], 'NO')
             st.session_state.annotations[sample['uid']] = {
                 'uid': sample['uid'],
@@ -284,7 +296,7 @@ if st.session_state.current_image is not None:
             st.rerun()
 
     with col3:
-        if st.button("🚫 INVALID URL (I)", key="invalid_btn", use_container_width=True):
+        if st.button("🚫 INVALID URL (I)", key="invalid_btn", width="stretch"):
             save_annotation(sample['uid'], 'INVALID')
             st.session_state.annotations[sample['uid']] = {
                 'uid': sample['uid'],
@@ -310,17 +322,17 @@ with st.sidebar:
 
     st.markdown("---")
 
-    st.subheader("🎯 Rozkład binów")
-    already_annotated_bins = calculate_bin_distribution_from_annotations(
-        st.session_state.data,
-        st.session_state.annotations
-    )
-
-    for bin_name in sorted(st.session_state.bin_remaining.keys()):
-        done = already_annotated_bins.get(bin_name, 0)
-        remaining = st.session_state.bin_remaining.get(bin_name, 0)
-        total_for_bin = done + remaining
-        st.write(f"**{bin_name}:** {done}/{total_for_bin} (pozostało: {remaining})")
+    # st.subheader("🎯 Rozkład binów")
+    # already_annotated_bins = calculate_bin_distribution_from_annotations(
+    #     st.session_state.data,
+    #     st.session_state.annotations
+    # )
+    #
+    # for bin_name in sorted(st.session_state.bin_remaining.keys()):
+    #     done = already_annotated_bins.get(bin_name, 0)
+    #     remaining = st.session_state.bin_remaining.get(bin_name, 0)
+    #     total_for_bin = done + remaining
+    #     st.write(f"**{bin_name}:** {done}/{total_for_bin} (pozostało: {remaining})")
 
     st.markdown("---")
     st.write(f"**Plik zapisu:** `{ANNOTATIONS_FILE}`")
