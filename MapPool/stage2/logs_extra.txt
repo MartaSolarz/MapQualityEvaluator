@@ -1,0 +1,11 @@
+Znaleziono 2725 pozytywnych i 2415 negatywnych fraz kluczowych.
+Budowanie automatu Aho-Corasick...
+Znaleziono 15 plików do przetworzenia.
+Rozpoczynam przetwarzanie z 6 workerami (ThreadPoolExecutor)...
+Przetwarzanie plików:   0%|          | 0/15 [00:00<?, ?it/s]Przetwarzanie plików:   7%|▋         | 1/15 [00:38<09:04, 38.87s/it]Przetwarzanie plików:  13%|█▎        | 2/15 [00:39<03:32, 16.32s/it]Przetwarzanie plików:  20%|██        | 3/15 [00:39<01:49,  9.10s/it]Przetwarzanie plików:  27%|██▋       | 4/15 [00:40<01:03,  5.77s/it]Przetwarzanie plików:  33%|███▎      | 5/15 [00:41<00:39,  3.99s/it]Przetwarzanie plików:  47%|████▋     | 7/15 [00:41<00:16,  2.03s/it]Przetwarzanie plików:  53%|█████▎    | 8/15 [00:41<00:10,  1.55s/it]Przetwarzanie plików:  60%|██████    | 9/15 [01:06<00:46,  7.78s/it]Przetwarzanie plików:  67%|██████▋   | 10/15 [01:08<00:30,  6.17s/it]Przetwarzanie plików:  73%|███████▎  | 11/15 [01:16<00:26,  6.74s/it]Przetwarzanie plików:  80%|████████  | 12/15 [01:21<00:18,  6.24s/it]Przetwarzanie plików:  87%|████████▋ | 13/15 [01:22<00:09,  4.67s/it]Przetwarzanie plików:  93%|█████████▎| 14/15 [01:22<00:03,  3.52s/it]Przetwarzanie plików: 100%|██████████| 15/15 [01:24<00:00,  2.92s/it]Przetwarzanie plików: 100%|██████████| 15/15 [01:24<00:00,  5.63s/it]
+
+❌ Błąd w part_6/3e031defe480c616a1ed6dc79ed0f6ab: [Errno 2] No such file or directory: './processed/part_6/3e031defe480c616a1ed6dc79ed0f6ab_processed_parts'
+
+✅ Zakończono przetwarzanie!
+   Sukces: 14/15
+   Błędy: 1/15

@@ -1,3 +1,6 @@
+"""
+W tym skrypcie zapisujemy wszystkie dane z katalogu `above_value_minus1` do jednego pliku Parquet, ale bez kolumny `l14_img`, która zawiera embeddingi. Skrypt iteruje po wszystkich plikach Parquet w katalogu, usuwa kolumnę z embeddingiem i zapisuje pozostałe dane do nowego pliku `all_no_embeddings.parquet`. Dzięki temu możemy zaoszczędzić miejsce na dysku, jeśli embeddingi nie są potrzebne do dalszej analizy.
+"""
 import time
 import pyarrow as pa
 import pyarrow.parquet as pq

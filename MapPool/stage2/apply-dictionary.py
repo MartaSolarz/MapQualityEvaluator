@@ -1,3 +1,14 @@
+"""
+Skrypt do przetwarzania plików MapPool z filtrowaniem słów kluczowych i obliczaniem wyników.
+Działa na zasadzie:
+1. Pobiera listę plików do przetworzenia (zdefiniowaną w all.json lub przekazaną jako argument).
+2. Dla każdego pliku:
+    - Pobiera go z Hugging Face Hub (jeśli nie jest już pobrany).
+    - Odczytuje dane i dla każdego rekordu oblicza wynik na podstawie obecności słów kluczowych (z automatu Aho-Corasick).
+    - Zapisuje przetworzone dane do nowego pliku Parquet (z kolumnami: uid, url, score, pos_keys, neg_keys, l14_img).
+3. Po przetworzeniu wszystkich plików, usuwa lokalne kopie pobranych plików, aby zwolnić miejsce.
+Używa ThreadPoolExecutor do równoległego przetwarzania wielu plików, co przyspiesza cały proces.
+"""
 import os
 import json
 import shutil

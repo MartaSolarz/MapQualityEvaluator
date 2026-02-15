@@ -1,3 +1,6 @@
+"""
+Skrypt pobiera embeddingi dla 200k próbek z pliku `sample_200k.parquet` i zapisuje je do nowego pliku `sample_200k_with_embeddings.parquet`. Skrypt iteruje po wszystkich plikach `part*.parquet` w katalogu, filtrując tylko te rekordy, których `uid` znajduje się w zbiorze `sample_200k`. Znalezione rekordy są łączone i zapisywane do nowego pliku Parquet. Skrypt zatrzymuje się, gdy znajdzie wszystkie potrzebne `uid` lub przetworzy wszystkie pliki.
+"""
 import polars as pl
 from pathlib import Path
 

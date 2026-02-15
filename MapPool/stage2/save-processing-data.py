@@ -1,3 +1,8 @@
+"""
+Skrypt służy do łączenia wielu plików Parquet z katalogu w jeden duży plik Parquet. Skrypt iteruje po wszystkich plikach `part*.parquet` w katalogu, łączy je w jeden DataFrame, a następnie zapisuje do nowego pliku `all.parquet`. Skrypt jest zoptymalizowany pod kątem pamięci, przetwarzając dane w mniejszych "chunkach" i zapisując je etapami. W przypadku dużych zbiorów danych, ten podejście pozwala uniknąć problemów z pamięcią RAM.
+
+Użycie: podmieniń PART_NAME
+"""
 import time
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -8,7 +13,7 @@ import numpy as np
 PART_NAME = 'part_7'
 directory = '/Volumes/PHD/phd/data/selected/above_value_minus1/'
 OUTPUT_PATH = '/Volumes/PHD/phd/data/selected/above_value_minus1/all.parquet'
-CHUNK_SIZE = 500  # Przetwarzaj 500 plików na raz
+CHUNK_SIZE = 500
 
 startTime = time.time()
 
