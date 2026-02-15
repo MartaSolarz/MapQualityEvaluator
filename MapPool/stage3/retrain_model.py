@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Retrain modelu po active learning iteration
+Retrain modelu po active learning iteration (NOWE PODEJŚCIE)
 
 Łączy:
-- Baseline train data (3000 próbek)
-- Iteration N annotations (np. 601 próbek)
-= Extended train data (np. 3601 próbek)
+- train.parquet (3,201 próbek baseline)
+- iteration_N/annotated.parquet (600 próbek)
+= Extended train data (3,801 próbek)
+
+Ewaluacja:
+- test.parquet (801 próbek) - STAŁY test set przez wszystkie iteracje!
 
 Trenuje wszystkie modele i porównuje z baseline
 """
@@ -50,18 +53,29 @@ MODELS_DIR = BASE_DIR / "models"
 ITERATIONS_DIR = BASE_DIR / "iterations"
 RESULTS_DIR = BASE_DIR / "results"
 
-BASELINE_TRAIN = DATA_DIR / "train.parquet"
-BASELINE_VAL_UIDS = DATA_DIR / "baseline_val_uids.json"
+TRAIN_FILE = DATA_DIR / "train.parquet"
+TEST_FILE = DATA_DIR / "test.parquet"
 EMBEDDINGS_FILE = BASE_DIR.parent / "data_all" / "above_value_minus1" / "sample_200k_with_embeddings.parquet"
 
 
-def load_baseline_train():
-    """Wczytaj baseline train data"""
-    print("📂 Wczytywanie baseline train data...")
-    df = pd.read_parquet(BASELINE_TRAIN)
+def load_train_data():
+    """Wczytaj train.parquet (baseline train)"""
+    print("📂 Wczytywanie train.parquet...")
+    df = pd.read_parquet(TRAIN_FILE)
     print(f"   Próbek: {len(df)}")
     print(f"   YES: {(df['label'] == 1).sum()} ({(df['label'] == 1).mean():.2%})")
     print(f"   NO: {(df['label'] == 0).sum()} ({(df['label'] == 0).mean():.2%})")
+    return df
+
+
+def load_test_data():
+    """Wczytaj test.parquet (STAŁY test set)"""
+    print("\n📂 Wczytywanie test.parquet (STAŁY test set)...")
+    df = pd.read_parquet(TEST_FILE)
+    print(f"   Próbek: {len(df)}")
+    print(f"   YES: {(df['label'] == 1).sum()} ({(df['label'] == 1).mean():.2%})")
+    print(f"   NO: {(df['label'] == 0).sum()} ({(df['label'] == 0).mean():.2%})")
+    print(f"   ⚠️  Test set jest IDENTYCZNY z baseline - fair comparison!")
     return df
 
 
@@ -157,61 +171,13 @@ def combine_datasets(baseline_df, iteration_df):
     return combined_df
 
 
-def prepare_train_data(df):
-    """Przygotuj X, y"""
+def prepare_data(df):
+    """Przygotuj X, y z DataFrame"""
     X = np.stack(df['l14_img'].values)
     y = df['label'].values
     uids = df['uid'].values
     
     return X, y, uids
-
-
-def create_fixed_train_val_split(X, y, uids):
-    """
-    Split używając STAŁEGO validation set z baseline
-    
-    To zapewnia fair comparison - testujemy na tych samych danych co baseline!
-    """
-    print(f"\n🔀 Podział train/val (STAŁY validation set z baseline)...")
-    
-    # Wczytaj baseline val UIDs
-    if not BASELINE_VAL_UIDS.exists():
-        raise FileNotFoundError(f"Brak pliku z baseline val UIDs: {BASELINE_VAL_UIDS}")
-    
-    with open(BASELINE_VAL_UIDS, 'r') as f:
-        baseline_val_uids = set(json.load(f))
-    
-    print(f"   Baseline val UIDs: {len(baseline_val_uids)}")
-    
-    # Split na podstawie UIDs
-    val_mask = np.array([uid in baseline_val_uids for uid in uids])
-    train_mask = ~val_mask
-    
-    X_train = X[train_mask]
-    y_train = y[train_mask]
-    uid_train = uids[train_mask]
-    
-    X_val = X[val_mask]
-    y_val = y[val_mask]
-    uid_val = uids[val_mask]
-    
-    print(f"   Train: {len(y_train)} próbek (baseline_train + iteration)")
-    print(f"      YES: {(y_train == 1).sum()} ({(y_train == 1).mean():.2%})")
-    print(f"      NO: {(y_train == 0).sum()} ({(y_train == 0).mean():.2%})")
-    
-    print(f"   Val: {len(y_val)} próbek (STAŁY - taki sam jak baseline!)")
-    print(f"      YES: {(y_val == 1).sum()} ({(y_val == 1).mean():.2%})")
-    print(f"      NO: {(y_val == 0).sum()} ({(y_val == 0).mean():.2%})")
-    
-    # Sprawdź czy val set się zgadza z baseline
-    expected_val_yes = 14  # z baseline
-    if (y_val == 1).sum() != expected_val_yes:
-        print(f"   ⚠️  UWAGA: Val set nie zgadza się z baseline!")
-        print(f"      Oczekiwano {expected_val_yes} YES, mam {(y_val == 1).sum()}")
-    else:
-        print(f"   ✅ Val set zgodny z baseline!")
-    
-    return X_train, X_val, y_train, y_val, uid_train, uid_val
 
 
 def get_models():
@@ -320,8 +286,8 @@ def apply_smote(X_train, y_train, sampling_strategy=0.3):
     return X_resampled, y_resampled
 
 
-def train_and_evaluate_model(name, model_config, X_train, y_train, X_val, y_val, use_smote=False):
-    """Trenuj i ewaluuj model"""
+def train_and_evaluate_model(name, model_config, X_train, y_train, X_test, y_test, use_smote=False):
+    """Trenuj na train i ewaluuj na test (STAŁY test set!)"""
     print(f"\n{'='*60}")
     print(f"🤖 Model: {name}")
     if use_smote:
@@ -331,12 +297,12 @@ def train_and_evaluate_model(name, model_config, X_train, y_train, X_val, y_val,
     # Preprocessing
     scaler = None
     X_train_processed = X_train.copy()
-    X_val_processed = X_val.copy()
+    X_test_processed = X_test.copy()
     
     if model_config['scale']:
         scaler = StandardScaler()
         X_train_processed = scaler.fit_transform(X_train)
-        X_val_processed = scaler.transform(X_val)
+        X_test_processed = scaler.transform(X_test)
     
     # SMOTE
     if use_smote:
@@ -354,23 +320,19 @@ def train_and_evaluate_model(name, model_config, X_train, y_train, X_val, y_val,
     print("   Trenowanie...")
     model.fit(X_train_processed, y_train_processed)
     
-    # Predict
-    y_val_pred_proba = model.predict_proba(X_val_processed)[:, 1]
-    y_val_pred = model.predict(X_val_processed)
+    # Predict on TEST set
+    y_test_pred_proba = model.predict_proba(X_test_processed)[:, 1]
+    y_test_pred = model.predict(X_test_processed)
     
-    # Metrics
-    results = calculate_metrics(y_val, y_val_pred, y_val_pred_proba)
+    # Metrics on TEST set
+    results = calculate_metrics(y_test, y_test_pred, y_test_pred_proba)
     
     # Optimal threshold
-    optimal_threshold, optimal_f1 = find_optimal_threshold(y_val, y_val_pred_proba)
+    optimal_threshold, optimal_f1 = find_optimal_threshold(y_test, y_test_pred_proba)
     results['optimal_threshold'] = optimal_threshold
     results['optimal_f1'] = optimal_f1
     
     print_results(results, optimal_threshold)
-    
-    # Bootstrap CI
-    bootstrap_stats = analyze_validation_stability(y_val, y_val_pred_proba, name)
-    results['bootstrap'] = bootstrap_stats
     
     return {
         'model': model,
@@ -784,28 +746,38 @@ def save_results(all_results, best_result, iteration_num, baseline_comparison=No
     return results_file
 
 def main(iteration_num=1):
-    """Główna funkcja retrain"""
+    """Główna funkcja retrain (NOWE PODEJŚCIE - stały test set!)"""
     print("\n" + "="*80)
-    print(f"🔄 RETRAIN MODELU - ITERATION {iteration_num}")
+    print(f"🔄 RETRAIN MODELU - ITERATION {iteration_num} (NOWE PODEJŚCIE)")
     print("="*80)
     
-    # 1. Wczytaj baseline train
-    baseline_df = load_baseline_train()
+    # 1. Wczytaj train.parquet (baseline)
+    train_df = load_train_data()
     
-    # 2. Wczytaj iteration annotations
+    # 2. Wczytaj test.parquet (STAŁY test set!)
+    test_df = load_test_data()
+    
+    # 3. Wczytaj iteration annotations
     iteration_df = load_iteration_annotations(iteration_num)
     
-    # 3. Merge iteration z embeddingami
+    # 4. Merge iteration z embeddingami
     iteration_df = merge_with_embeddings(iteration_df)
     
-    # 4. Połącz datasets
-    combined_df = combine_datasets(baseline_df, iteration_df)
+    # 5. Połącz train + iteration (= nowy extended train)
+    extended_train_df = combine_datasets(train_df, iteration_df)
     
-    # 5. Przygotuj dane
-    X, y, uids = prepare_train_data(combined_df)
+    # 6. Przygotuj dane
+    X_train, y_train, uid_train = prepare_data(extended_train_df)
+    X_test, y_test, uid_test = prepare_data(test_df)
     
-    # 6. Train/val split (STAŁY validation set!)
-    X_train, X_val, y_train, y_val, uid_train, uid_val = create_fixed_train_val_split(X, y, uids)
+    print(f"\n📊 Podsumowanie danych:")
+    print(f"   Train (extended): {len(y_train)} próbek")
+    print(f"      YES: {(y_train == 1).sum()} ({(y_train == 1).mean():.2%})")
+    print(f"      NO: {(y_train == 0).sum()} ({(y_train == 0).mean():.2%})")
+    print(f"   Test (STAŁY):     {len(y_test)} próbek")
+    print(f"      YES: {(y_test == 1).sum()} ({(y_test == 1).mean():.2%})")
+    print(f"      NO: {(y_test == 0).sum()} ({(y_test == 0).mean():.2%})")
+    print(f"   ✅ Test set IDENTYCZNY z baseline!")
     
     # 7. Trenuj modele
     models = get_models()
@@ -814,14 +786,14 @@ def main(iteration_num=1):
     for name, model_config in models.items():
         # Bez SMOTE
         result = train_and_evaluate_model(
-            name, model_config, X_train, y_train, X_val, y_val, use_smote=False
+            name, model_config, X_train, y_train, X_test, y_test, use_smote=False
         )
         all_results.append(result)
         
         # Z SMOTE (tylko jeśli dostępny i nie SVM - SVM jest zbyt wolny)
         if SMOTE_AVAILABLE and name != 'SVM_RBF':
             result_smote = train_and_evaluate_model(
-                name, model_config, X_train, y_train, X_val, y_val, use_smote=True
+                name, model_config, X_train, y_train, X_test, y_test, use_smote=True
             )
             all_results.append(result_smote)
     
@@ -831,7 +803,7 @@ def main(iteration_num=1):
     # 9. NOWA ANALIZA: Tracking przez iteracje
     trends = track_all_models_over_iterations(iteration_num)
     
-    # 10. Porównaj z baseline (stary sposób)
+    # 10. Porównaj z baseline
     best_result = compare_with_baseline(all_results, iteration_num)
     
     # 11. Zapisz wyniki do results/
@@ -869,7 +841,7 @@ def main(iteration_num=1):
     print(f"\n🎯 Następne kroki:")
     print(f"   1. Sprawdź czy model się poprawił (powyżej)")
     print(f"   2. Jeśli TAK: uruchom iteration_{iteration_num + 1}")
-    print(f"      python active_learning.py --iteration {iteration_num + 1}")
+    print(f"      python3 active_learning.py --iteration {iteration_num + 1}")
     print(f"   3. Jeśli NIE: przeanalizuj dlaczego i rozważ inne podejście")
 
 

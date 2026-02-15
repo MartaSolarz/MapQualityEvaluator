@@ -620,18 +620,29 @@ def main(n_samples=600, strategy='entropy', iteration_num=1, invalid_rate=0.38,
     print("✅ ACTIVE LEARNING - GOTOWE!")
     print("="*80)
     print(f"\n📁 Katalog iteracji: {iteration_dir}")
-    print(f"📝 Próbek do adnotacji: {n_samples}")
-    print(f"🎲 Strategia: {strategy}")
+    print(f"📝 Próbek do adnotacji: {n_samples} (target VALID)")
+    print(f"📦 Wybranych próbek: {len(df_selected)} (z buforem na invalid)")
+    print(f"🎲 Strategia: {strategy}" + (" (STRATIFIED)" if use_stratified else " (pure)"))
+    if use_stratified:
+        print(f"   Positive ratio: {positive_ratio:.1%}")
     
     print(f"\n🔮 Predykcje modelu dla wybranych próbek:")
     print(f"   Potencjalne YES (proba > 0.5): {stats['potential_positive_count']} ({stats['potential_positive_ratio']:.1%})")
     print(f"   Średnie prawdopodobieństwo: {stats['pred_proba_mean']:.3f}")
     
+    if 'distribution_shift' in stats:
+        print(f"\n📊 Distribution shift:")
+        print(f"   Train mean score: {stats['train_score_mean']:.3f}")
+        print(f"   Selected mean score: {stats['selected_score_mean']:.3f}")
+        print(f"   Shift: {stats['distribution_shift']:+.3f}")
+        if abs(stats['distribution_shift']) > 1.0:
+            print(f"   ⚠️  UWAGA: Duży distribution shift!")
+    
     print(f"\n🎯 Następne kroki:")
-    print(f"   1. Zaadnotuj próbki w: {iteration_dir}/to_annotate.parquet")
-    print(f"   2. Zapisz wyniki jako: {iteration_dir}/annotated.parquet")
-    print(f"   3. Użyj annotation interface z stage2 lub zaadnotuj ręcznie")
-    print(f"   4. Po adnotacji uruchom retrain (TODO: implement)")
+    print(f"   1. Zaadnotuj próbki używając annotation interface")
+    print(f"   2. Interface automatycznie zapisze: {iteration_dir}/annotated.parquet")
+    print(f"   3. Po adnotacji użyj retrain_model.py")
+    print(f"   4. Uruchom kolejną iterację active learning")
     
     print("\n" + "="*80)
 
