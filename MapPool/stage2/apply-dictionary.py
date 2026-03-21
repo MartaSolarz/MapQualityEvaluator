@@ -29,7 +29,7 @@ OUTPUT_FOLDER = "./processed"
 BATCH_SIZE = 1000
 MAX_WORKERS = 10
 REPO_ID = "sraimund/MapPool"
-TOKEN="REDACTED_HF_TOKEN"
+TOKEN = os.environ.get("HF_TOKEN")
 
 file_locks = {}
 batch_counters = {}
