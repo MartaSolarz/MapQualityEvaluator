@@ -205,3 +205,10 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Stage 5 pipeline artifacts
+MapPool/stage5/pipeline.db
+MapPool/stage5/pipeline.db-wal
+MapPool/stage5/pipeline.db-shm
+MapPool/stage5/images/
+MapPool/stage5/results/

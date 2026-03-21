@@ -1,0 +1,85 @@
+{
+  "timestamp": "2026-02-17T22:43:31.794493",
+  "elapsed_time_seconds": 6943.287708,
+  "files": {
+    "total": 8,
+    "successful": 8,
+    "errors": 0,
+    "skipped": 0
+  },
+  "samples": {
+    "total": 54910158,
+    "positive": 1675637,
+    "positive_rate": 0.030515974840210805
+  },
+  "throughput": {
+    "samples_per_second": 7908.380051244738,
+    "files_per_minute": 0.06913151523981181
+  },
+  "per_file_stats": [
+    {
+      "file": "part_0.parquet",
+      "status": "success",
+      "total": 7008537,
+      "positive": 213658,
+      "positive_rate": 0.03048539231511512,
+      "output": "stage4/results/predictions_50M_temp/predictions_part_0.parquet"
+    },
+    {
+      "file": "part_1.parquet",
+      "status": "success",
+      "total": 7009688,
+      "positive": 214672,
+      "positive_rate": 0.03062504351120906,
+      "output": "stage4/results/predictions_50M_temp/predictions_part_1.parquet"
+    },
+    {
+      "file": "part_3.parquet",
+      "status": "success",
+      "total": 7011603,
+      "positive": 214875,
+      "positive_rate": 0.030645631248660255,
+      "output": "stage4/results/predictions_50M_temp/predictions_part_3.parquet"
+    },
+    {
+      "file": "part_2.parquet",
+      "status": "success",
+      "total": 7066810,
+      "positive": 216034,
+      "positive_rate": 0.03057022900007217,
+      "output": "stage4/results/predictions_50M_temp/predictions_part_2.parquet"
+    },
+    {
+      "file": "part_4.parquet",
+      "status": "success",
+      "total": 6795434,
+      "positive": 208178,
+      "positive_rate": 0.03063498225426073,
+      "output": "stage4/results/predictions_50M_temp/predictions_part_4.parquet"
+    },
+    {
+      "file": "part_7.parquet",
+      "status": "success",
+      "total": 6543387,
+      "positive": 194504,
+      "positive_rate": 0.02972527836119123,
+      "output": "stage4/results/predictions_50M_temp/predictions_part_7.parquet"
+    },
+    {
+      "file": "part_5.parquet",
+      "status": "success",
+      "total": 6685069,
+      "positive": 205117,
+      "positive_rate": 0.030682854582353602,
+      "output": "stage4/results/predictions_50M_temp/predictions_part_5.parquet"
+    },
+    {
+      "file": "part_6.parquet",
+      "status": "success",
+      "total": 6789630,
+      "positive": 208599,
+      "positive_rate": 0.03072317637338117,
+      "output": "stage4/results/predictions_50M_temp/predictions_part_6.parquet"
+    }
+  ]
+}

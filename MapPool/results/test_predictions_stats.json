@@ -1,0 +1,29 @@
+{
+  "timestamp": "2026-02-17T20:19:35.484583",
+  "elapsed_time_seconds": 79.737933,
+  "files": {
+    "total": 1,
+    "successful": 1,
+    "errors": 0,
+    "skipped": 0
+  },
+  "samples": {
+    "total": 196008,
+    "positive": 5750,
+    "positive_rate": 0.02933553732500714
+  },
+  "throughput": {
+    "samples_per_second": 2458.1525081669724,
+    "files_per_minute": 0.7524649529101789
+  },
+  "per_file_stats": [
+    {
+      "file": "pool.parquet",
+      "status": "success",
+      "total": 196008,
+      "positive": 5750,
+      "positive_rate": 0.02933553732500714,
+      "output": "/Users/martasolarz/phd/MapQualityEvaluator/MapPool/results/test_predictions_temp/predictions_pool.parquet"
+    }
+  ]
+}
