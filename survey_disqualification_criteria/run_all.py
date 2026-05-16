@@ -1,10 +1,10 @@
 """
 run_all.py
 ==========
-Uruchamia wszystkie moduły analityczne po kolei i drukuje ich wyniki.
-Pozwala odtworzyć wszystkie liczby z dokumentu Stan_prac.pdf jednym poleceniem.
+Runs all analytical modules sequentially and prints their results.
+Allows reproducing all numbers from the Stan_prac.pdf document with a single command.
 
-Uruchomienie:
+Run:
     python run_all.py
 """
 import subprocess
@@ -12,18 +12,18 @@ import sys
 import os
 
 MODULES = [
-    ('01_participants.py',     'Sekcja 1: Charakterystyka respondentów'),
-    ('02_per_criterion.py',    'Sekcja 2: Wyniki per kryterium'),
-    ('03_ranking.py',          'Sekcja 3: Ranking i porównanie kategorii'),
-    ('04_agreement.py',        'Sekcja 4: Zgodność ekspertów (Krippendorff α, CV)'),
-    ('05_correlations.py',     'Sekcja 5.3: Korelacje z doświadczeniem'),
-    ('06_bootstrap.py',        'Odporność 1: Bootstrap 95% CI'),
-    ('07_jackknife.py',        'Odporność 2: Jackknife (leave-one-out)'),
-    ('08_schools.py',          'Odporność 3-4: Porównanie międzyszkolne'),
-    ('09_friedman.py',         'Odporność 5: Test Friedmana'),
-    ('10_effect_size.py',      'Odporność 6: Effect size (Cohen\'s d)'),
-    ('11_respondent_diag.py',  'Odporność 7: Diagnostyka respondenta'),
-    ('12_sensitivity.py',      'Odporność 8: Analiza wrażliwości Quality Score'),
+    ('01_participants.py',     'Section 1: Respondent characteristics'),
+    ('02_per_criterion.py',    'Section 2: Results per criterion'),
+    ('03_ranking.py',          'Section 3: Ranking and category comparison'),
+    ('04_agreement.py',        'Section 4: Expert agreement (Krippendorff alpha, CV)'),
+    ('05_correlations.py',     'Section 5.3: Correlations with experience'),
+    ('06_bootstrap.py',        'Robustness 1: Bootstrap 95% CI'),
+    ('07_jackknife.py',        'Robustness 2: Jackknife (leave-one-out)'),
+    ('08_schools.py',          'Robustness 3-4: Inter-school comparison'),
+    ('09_friedman.py',         'Robustness 5: Friedman test'),
+    ('10_effect_size.py',      'Robustness 6: Effect size (Cohen\'s d)'),
+    ('11_respondent_diag.py',  'Robustness 7: Respondent diagnostics'),
+    ('12_sensitivity.py',      'Robustness 8: Quality Score sensitivity analysis'),
 ]
 
 
@@ -32,13 +32,13 @@ def main():
     for fname, title in MODULES:
         print("\n\n" + "#" * 100)
         print(f"# {title}")
-        print(f"# Plik: {fname}")
+        print(f"# File: {fname}")
         print("#" * 100)
         path = os.path.join(here, fname)
         result = subprocess.run([sys.executable, path], capture_output=True, text=True)
         print(result.stdout, end='')
         if result.returncode != 0:
-            print(f"\n[!] BŁĄD w {fname}:")
+            print(f"\n[!] ERROR in {fname}:")
             print(result.stderr)
             sys.exit(1)
 

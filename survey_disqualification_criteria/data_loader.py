@@ -1,70 +1,70 @@
 """
 data_loader.py
 ==============
-Wspólny moduł wczytywania danych dla wszystkich skryptów analitycznych.
+Shared data loading module for all analytical scripts.
 
-Zawiera:
-- definicję 10 kryteriów dyskwalifikujących (ID, nazwa, kategoria, kolumna w pliku Excel)
-- funkcję load_ratings() — wczytuje plik Excel i zwraca macierz ocen 25×10 + metadane
-- funkcję normalize_country() — łączy warianty zapisu krajów (UK / United Kingdom / Uk → UK)
-- funkcję classify_school() — klasyfikuje respondenta do szkoły kartograficznej (UK/CZ/DE-speak/Other)
-  zgodnie z regułą "first-listed" (pierwszy wymieniony kraj określa szkołę)
-- funkcję parse_years() — sprowadza wartości tekstowe ("A year and still counting", "Five years",
-  "4 years") do liczb
+Contains:
+- definition of 10 disqualification criteria (ID, name, category, Excel column)
+- load_ratings() function — loads the Excel file and returns a 25x10 ratings matrix + metadata
+- normalize_country() function — merges country name variants (UK / United Kingdom / Uk -> UK)
+- classify_school() function — classifies a respondent into a cartographic school (UK/CZ/DE-speak/Other)
+  according to the "first-listed" rule (the first listed country determines the school)
+- parse_years() function — converts text values ("A year and still counting", "Five years",
+  "4 years") to numbers
 
-Wszystkie pozostałe moduły importują ten plik, dzięki czemu wczytywanie i klasyfikacja
-są spójne między analizami.
+All other modules import this file, ensuring that loading and classification
+are consistent across analyses.
 """
 import pandas as pd
 import numpy as np
 import re
 
-# Domyślna ścieżka do pliku z odpowiedziami
+# Default path to the responses file
 DEFAULT_PATH = 'survey_responses.xlsx'
 
-# Definicja 10 kryteriów dyskwalifikujących
-# col_idx: numer kolumny w pliku Excel (0-indeksowany)
-# id: identyfikator kryterium
-# name_pl: polska nazwa
-# category: kategoria zgodna z modelem teoretycznym
+# Definition of 10 disqualification criteria
+# col_idx: column number in the Excel file (0-indexed)
+# id: criterion identifier
+# name_en: English name
+# category: category according to the theoretical model
 CRITERIA = [
     {'id': 'D1', 'col_idx': 2,  'category': 'DATA',
-     'name_pl': 'Niejednoznaczność zmiennej statystycznej (danych tematycznych)',
-     'name_short_pl': 'Niejednoznaczność zmiennej'},
+     'name_en': 'Ambiguity of the statistical variable (thematic data)',
+     'name_short_en': 'Variable ambiguity'},
     {'id': 'D2', 'col_idx': 3,  'category': 'DATA',
-     'name_pl': 'Brak spójności doboru jednostek podziału na całej mapie',
-     'name_short_pl': 'Brak spójności jednostek'},
+     'name_en': 'Lack of consistency in the selection of division units across the entire map',
+     'name_short_en': 'Inconsistent units'},
     {'id': 'A1', 'col_idx': 4,  'category': 'DATA ANALYSIS & TRANSFORM',
-     'name_pl': 'Dane bezwzględne użyte w kartogramie',
-     'name_short_pl': 'Dane bezwzględne w kartogramie'},
+     'name_en': 'Absolute data used in a choropleth map',
+     'name_short_en': 'Absolute data in choropleth'},
     {'id': 'A2', 'col_idx': 5,  'category': 'DATA ANALYSIS & TRANSFORM',
-     'name_pl': 'Zastosowanie symbolizacji właściwej dla danych jakościowych do danych ilościowych',
-     'name_short_pl': 'Symbolika jakościowa dla ilościowych'},
+     'name_en': 'Applying symbolization appropriate for qualitative data to quantitative data',
+     'name_short_en': 'Qualitative symbolization for quantitative data'},
     {'id': 'A3', 'col_idx': 6,  'category': 'DATA ANALYSIS & TRANSFORM',
-     'name_pl': 'Brak informacji umożliwiającej zrozumienie sposobu klasyfikacji danych',
-     'name_short_pl': 'Brak inf. o klasyfikacji'},
+     'name_en': 'Lack of information enabling understanding of the data classification method',
+     'name_short_en': 'No classification info'},
     {'id': 'V1', 'col_idx': 7,  'category': 'VISUALIZATION',
-     'name_pl': 'Brak rozróżnialności wartości minimalnych i maksymalnych',
-     'name_short_pl': 'Brak rozróżnialności min-max'},
+     'name_en': 'Lack of distinguishability between minimum and maximum values',
+     'name_short_en': 'No min-max distinguishability'},
     {'id': 'V2', 'col_idx': 8,  'category': 'VISUALIZATION',
-     'name_pl': 'Nakładanie się diagramów uniemożliwiające odczyt',
-     'name_short_pl': 'Nakładanie się diagramów'},
+     'name_en': 'Overlapping diagrams preventing readability',
+     'name_short_en': 'Overlapping diagrams'},
     {'id': 'L1', 'col_idx': 9,  'category': 'LAYOUT',
-     'name_pl': 'Brak tytułu mapy',
-     'name_short_pl': 'Brak tytułu mapy'},
+     'name_en': 'Missing map title',
+     'name_short_en': 'Missing map title'},
     {'id': 'L2', 'col_idx': 10, 'category': 'LAYOUT',
-     'name_pl': 'Brak legendy',
-     'name_short_pl': 'Brak legendy'},
+     'name_en': 'Missing legend',
+     'name_short_en': 'Missing legend'},
     {'id': 'L3', 'col_idx': 11, 'category': 'LAYOUT',
-     'name_pl': 'Brak informacji o źródle danych',
-     'name_short_pl': 'Brak źródła danych'},
+     'name_en': 'Missing data source information',
+     'name_short_en': 'Missing data source'},
 ]
 
-# Krótkie listy używane jako klucze
+# Short lists used as keys
 CRIT_IDS = [c['id'] for c in CRITERIA]
 CRIT_INDEX = {c['id']: i for i, c in enumerate(CRITERIA)}
 
-# Kolumny demograficzne (0-indeksowane)
+# Demographic columns (0-indexed)
 COL_TIMESTAMP   = 0
 COL_CONSENT     = 1
 COL_GENDER      = 12
@@ -80,11 +80,11 @@ COL_SELF_EXPERT = 20
 
 def load_ratings(path=DEFAULT_PATH):
     """
-    Wczytaj plik Excel i zwróć macierz ocen + ramkę z surowymi danymi.
+    Load the Excel file and return the ratings matrix + raw data frame.
 
     Returns:
-        ratings: np.ndarray kształtu (N, 10) — oceny respondentów dla każdego z 10 kryteriów
-        df: pd.DataFrame — pełna ramka danych (do wyciągania kolumn demograficznych)
+        ratings: np.ndarray of shape (N, 10) — respondent ratings for each of 10 criteria
+        df: pd.DataFrame — full data frame (for extracting demographic columns)
     """
     df = pd.read_excel(path)
     n = len(df)
@@ -96,11 +96,11 @@ def load_ratings(path=DEFAULT_PATH):
 
 def normalize_country(c):
     """
-    Sprowadź różne warianty zapisu kraju do formy kanonicznej.
+    Normalize various country name variants to a canonical form.
 
-    Przykłady:
-        'Uk', 'UK', 'United Kingdom', 'United Kingdom ' → 'United Kingdom'
-        'CZ', 'Czechia', 'Czech Republic' → 'Czechia'
+    Examples:
+        'Uk', 'UK', 'United Kingdom', 'United Kingdom ' -> 'United Kingdom'
+        'CZ', 'Czechia', 'Czech Republic' -> 'Czechia'
     """
     if pd.isna(c):
         return 'Unknown'
@@ -120,21 +120,21 @@ def normalize_country(c):
 
 def classify_school(country_raw):
     """
-    Sklasyfikuj respondenta do szkoły kartograficznej zgodnie z regułą 'first-listed'.
+    Classify a respondent into a cartographic school according to the 'first-listed' rule.
 
-    Reguła: jeśli respondent wymienił kilka krajów (oddzielone przecinkiem lub slashem),
-    decyduje pierwszy z nich (interpretowany jako podstawowa afiliacja zawodowa).
+    Rule: if a respondent listed several countries (separated by comma or slash),
+    the first one decides (interpreted as the primary professional affiliation).
 
-    Kategorie:
-        UK       — pierwszy kraj: UK lub United Kingdom
-        CZ       — pierwszy kraj: Czechia, Czech Republic lub CZ
-        DE-speak — pierwszy kraj: Germany, Switzerland lub Austria (DACH)
-        Other    — pozostałe (USA, Francja, Ghana, Nigeria, …)
+    Categories:
+        UK       — first country: UK or United Kingdom
+        CZ       — first country: Czechia, Czech Republic, or CZ
+        DE-speak — first country: Germany, Switzerland, or Austria (DACH)
+        Other    — remaining (USA, France, Ghana, Nigeria, ...)
     """
     if pd.isna(country_raw):
         return 'Other'
     s = str(country_raw).strip()
-    # Wybierz pierwszy kraj (split po przecinku lub slash-u)
+    # Select the first country (split by comma or slash)
     first = s.split(',')[0].split('/')[0].strip().lower()
     if first in ('uk', 'united kingdom'):
         return 'UK'
@@ -147,14 +147,14 @@ def classify_school(country_raw):
 
 def parse_years(val):
     """
-    Sprowadź tekstową wartość lat doświadczenia do liczby.
+    Convert text experience values to numbers.
 
-    Reguły mapowania:
-        'A year and still counting' → 1
-        'Five years', 'Ten years', itd. → odpowiednie liczby
-        '4 years', '12.5' → odpowiednia liczba
-        Wartość liczbowa → bez zmian
-        NaN → None
+    Mapping rules:
+        'A year and still counting' -> 1
+        'Five years', 'Ten years', etc. -> corresponding numbers
+        '4 years', '12.5' -> corresponding number
+        Numeric value -> unchanged
+        NaN -> None
     """
     if pd.isna(val):
         return None
@@ -188,21 +188,21 @@ def parse_years(val):
 
 
 def get_schools(df):
-    """Zwróć listę przypisanych szkół dla każdego respondenta."""
+    """Return a list of assigned schools for each respondent."""
     return [classify_school(c) for c in df.iloc[:, COL_COUNTRY]]
 
 
 def get_countries_normalized(df):
-    """Zwróć listę znormalizowanych krajów dla każdego respondenta."""
+    """Return a list of normalized countries for each respondent."""
     return [normalize_country(c) for c in df.iloc[:, COL_COUNTRY]]
 
 
 if __name__ == "__main__":
-    # Smoke-test: czy wczytanie działa poprawnie
+    # Smoke-test: verify that loading works correctly
     ratings, df = load_ratings()
-    print(f"Liczba respondentów (N): {len(df)}")
-    print(f"Kształt macierzy ocen: {ratings.shape}")
-    print(f"Lista identyfikatorów kryteriów: {CRIT_IDS}")
-    print(f"\nKlasyfikacja szkół:")
+    print(f"Number of respondents (N): {len(df)}")
+    print(f"Ratings matrix shape: {ratings.shape}")
+    print(f"List of criterion identifiers: {CRIT_IDS}")
+    print(f"\nSchool classification:")
     schools = get_schools(df)
     print(pd.Series(schools).value_counts().to_dict())

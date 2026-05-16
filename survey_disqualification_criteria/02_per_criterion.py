@@ -1,21 +1,21 @@
 """
 02_per_criterion.py
 ====================
-Sekcja 2 dokumentu Stan_prac.pdf: Wyniki per kryterium.
+Section 2 of the Stan_prac.pdf document: Results per criterion.
 
-Dla każdego z 10 kryteriów oblicza:
-- Średnią (mean) ocen ekspertów
-- Medianę
-- Odchylenie standardowe (SD, próbkowe n-1)
+For each of the 10 criteria computes:
+- Mean of expert ratings
+- Median
+- Standard deviation (SD, sample n-1)
 - Min, Max
-- Rozkład odpowiedzi (n=1, n=2, ..., n=5)
-- Wagę dyskwalifikującą w_i = (mean - 1) / 4
-- Współczynnik zmienności CV = SD / mean
+- Response distribution (n=1, n=2, ..., n=5)
+- Disqualification weight w_i = (mean - 1) / 4
+- Coefficient of variation CV = SD / mean
 
-Drukuje tabelę zbiorczą zgodną z tabelą w sekcji 2 dokumentu oraz
-sumę wag Σ w_i potrzebną do normalizacji w modelu Stage 1.
+Prints a summary table consistent with the table in section 2 of the document and
+the sum of weights Sigma w_i needed for normalization in the Stage 1 model.
 
-Uruchomienie:
+Run:
     python 02_per_criterion.py
 """
 import numpy as np
@@ -24,20 +24,20 @@ from data_loader import load_ratings, CRITERIA, CRIT_IDS
 
 def compute_per_criterion(ratings):
     """
-    Oblicz pełen zestaw statystyk dla każdego kryterium.
+    Compute the full set of statistics for each criterion.
 
     Args:
-        ratings: np.ndarray (N, 10) — macierz ocen
+        ratings: np.ndarray (N, 10) — ratings matrix
 
     Returns:
-        list of dict — jeden dict per kryterium z polami:
-            id, mean, median, sd, min, max, dist (rozkład 1..5),
-            w (waga), cv (współczynnik zmienności), n
+        list of dict — one dict per criterion with fields:
+            id, mean, median, sd, min, max, dist (distribution 1..5),
+            w (weight), cv (coefficient of variation), n
     """
     results = []
     for i, crit in enumerate(CRITERIA):
         col = ratings[:, i]
-        col = col[~np.isnan(col)]  # usuń NaN, gdyby były
+        col = col[~np.isnan(col)]  # remove NaN if any
         mean = col.mean()
         median = float(np.median(col))
         sd = col.std(ddof=1)
@@ -48,7 +48,7 @@ def compute_per_criterion(ratings):
         cv = sd / mean if mean else None
         results.append({
             'id': crit['id'],
-            'name_pl': crit['name_pl'],
+            'name_en': crit['name_en'],
             'category': crit['category'],
             'n': len(col),
             'mean': mean,
@@ -67,7 +67,7 @@ def main():
     ratings, _ = load_ratings()
     stats = compute_per_criterion(ratings)
 
-    # Nagłówek tabeli zgodny z tabelą w sekcji 2 dokumentu
+    # Table header consistent with the table in section 2 of the document
     header = (f"{'ID':<4} {'Mean':>6} {'Med':>5} {'SD':>5} {'Min':>4} {'Max':>4} "
               f"{'n=1':>4} {'n=2':>4} {'n=3':>4} {'n=4':>4} {'n=5':>4} "
               f"{'w_i':>6} {'CV':>6}")
@@ -84,13 +84,13 @@ def main():
         sum_w += s['w']
 
     print('-' * len(header))
-    print(f"\nSuma wag wszystkich kryteriów: Σ w_i = {sum_w:.2f}")
-    print("(Wartość ta stanowi mianownik w normalizacji kary P_norm = P / Σ w_i "
-          "w modelu Stage 1.)")
+    print(f"\nSum of all criterion weights: Sigma w_i = {sum_w:.2f}")
+    print("(This value serves as the denominator in the penalty normalization P_norm = P / Sigma w_i "
+          "in the Stage 1 model.)")
 
-    print("\nNazwy kryteriów:")
+    print("\nCriterion names:")
     for s in stats:
-        print(f"  {s['id']}: {s['name_pl']}  [{s['category']}]")
+        print(f"  {s['id']}: {s['name_en']}  [{s['category']}]")
 
 
 if __name__ == "__main__":

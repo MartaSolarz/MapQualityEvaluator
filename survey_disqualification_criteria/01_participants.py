@@ -1,21 +1,21 @@
 """
 01_participants.py
 ==================
-Sekcja 1 dokumentu Stan_prac.pdf: Charakterystyka respondentów.
+Section 1 of the Stan_prac.pdf document: Respondent characteristics.
 
-Oblicza i drukuje:
-- 1.1 Rozkład płci
-- 1.2 Rozkład krajów (znormalizowany)
-- 1.3 Rozkład poziomu wykształcenia
-- 1.4 Typ instytucji
-- 1.5 Praca z mapami i mapami statystycznymi
-- 1.6 Lata doświadczenia (mean, median, SD, min, max)
-- 1.7 Samoocena poziomu eksperckiego
+Computes and prints:
+- 1.1 Gender distribution
+- 1.2 Country distribution (normalized)
+- 1.3 Education level distribution
+- 1.4 Institution type
+- 1.5 Working with maps and statistical maps
+- 1.6 Years of experience (mean, median, SD, min, max)
+- 1.7 Self-assessed expertise level
 
-Uruchomienie:
+Run:
     python 01_participants.py
 
-Wszystkie liczby zaokrąglono do 2 miejsc po przecinku.
+All numbers rounded to 2 decimal places.
 """
 import pandas as pd
 import numpy as np
@@ -33,7 +33,7 @@ def section_header(title):
 
 
 def print_freq_table(series, title, N):
-    """Wydrukuj tabelę częstości z liczbą i procentem."""
+    """Print a frequency table with count and percentage."""
     print(f"\n--- {title} ---")
     counts = series.value_counts()
     for k, v in counts.items():
@@ -42,12 +42,12 @@ def print_freq_table(series, title, N):
 
 
 def classify_institution(inst):
-    """Klasyfikacja typu instytucji na podstawie nazwy."""
+    """Classify institution type based on its name."""
     if pd.isna(inst):
-        return 'Nie podano'
+        return 'Not provided'
     s = str(inst).lower()
     if 'leibniz' in s and 'university' not in s:
-        return 'Instytut badawczy'
+        return 'Research institute'
     university_markers = [
         'university', 'tum', 'tu dresden', 'ensg', 'charles', 'leeds',
         'chicago', 'oregon', 'east anglia', 'edinburgh', 'manchester',
@@ -55,34 +55,34 @@ def classify_institution(inst):
         'heriot', 'ucla', 'ghana', 'wien', 'tu '
     ]
     if any(m in s for m in university_markers):
-        return 'Uniwersytet / uczelnia wyższa'
-    return 'Inne'
+        return 'University / higher education'
+    return 'Other'
 
 
 def main():
     ratings, df = load_ratings()
     N = len(df)
-    print(f"Łączna liczba respondentów: N = {N}")
+    print(f"Total number of respondents: N = {N}")
 
-    # ----- 1.1 PŁEĆ -----
-    section_header("1.1. Płeć")
-    print_freq_table(df.iloc[:, COL_GENDER], "Rozkład płci", N)
+    # ----- 1.1 GENDER -----
+    section_header("1.1. Gender")
+    print_freq_table(df.iloc[:, COL_GENDER], "Gender distribution", N)
 
-    # ----- 1.2 KRAJ -----
-    section_header("1.2. Kraj afiliacji")
+    # ----- 1.2 COUNTRY -----
+    section_header("1.2. Country of affiliation")
     countries_norm = [normalize_country(c) for c in df.iloc[:, COL_COUNTRY]]
-    # W dokumencie używamy formy "raw" (np. 'UK', 'Germany'), ale z połączeniami wariantów.
-    # Tutaj pokazujemy oba rzuty.
-    print("\n--- Rozkład krajów (wersja znormalizowana) ---")
+    # In the document we use the "raw" form (e.g. 'UK', 'Germany'), but with variant merging.
+    # Here we show both projections.
+    print("\n--- Country distribution (normalized version) ---")
     counts_norm = pd.Series(countries_norm).value_counts()
     for k, v in counts_norm.items():
         pct = (v / N) * 100
         print(f"  {k:<25} {v:>4}  ({pct:>5.2f}%)")
 
-    print("\n--- Rozkład krajów (wersje wzbogacone — wpisy wielokrajowe rozdzielone) ---")
-    print("(Uwaga: dokument zachowuje wpisy złożone jako odrębne kategorie.)")
+    print("\n--- Country distribution (enriched version — multi-country entries separated) ---")
+    print("(Note: the document preserves composite entries as separate categories.)")
     raw = df.iloc[:, COL_COUNTRY].astype(str).str.strip()
-    # Zastąp różne formy "UK" jednolitym zapisem 'UK', a Czech variants → 'Czechia'
+    # Replace various forms of "UK" with a uniform spelling 'UK', and Czech variants -> 'Czechia'
     def display_form(c):
         s = str(c).strip()
         if s.upper() == 'UK' or s == 'Uk':
@@ -96,31 +96,31 @@ def main():
         pct = (v / N) * 100
         print(f"  {k:<45} {v:>4}  ({pct:>5.2f}%)")
 
-    # ----- 1.3 WYKSZTAŁCENIE -----
-    section_header("1.3. Poziom wykształcenia")
-    print_freq_table(df.iloc[:, COL_EDUCATION], "Wykształcenie", N)
+    # ----- 1.3 EDUCATION -----
+    section_header("1.3. Education level")
+    print_freq_table(df.iloc[:, COL_EDUCATION], "Education", N)
 
-    # ----- 1.4 INSTYTUCJE -----
-    section_header("1.4. Typ instytucji")
+    # ----- 1.4 INSTITUTIONS -----
+    section_header("1.4. Institution type")
     institutions = [classify_institution(i) for i in df.iloc[:, COL_INSTITUTION]]
-    print_freq_table(pd.Series(institutions), "Typ instytucji", N)
+    print_freq_table(pd.Series(institutions), "Institution type", N)
 
-    # ----- 1.5 PRACA Z MAPAMI -----
-    section_header("1.5. Praca z mapami i mapami statystycznymi")
-    print("\n--- Praca z mapami (ogółem) ---")
+    # ----- 1.5 WORKING WITH MAPS -----
+    section_header("1.5. Working with maps and statistical maps")
+    print("\n--- Working with maps (overall) ---")
     maps_counts = df.iloc[:, COL_WORKS_MAPS].value_counts()
     for k, v in maps_counts.items():
         pct = (v / N) * 100
         print(f"  {str(k):<25} {v:>4}  ({pct:>5.2f}%)")
 
-    print("\n--- Praca z mapami statystycznymi ---")
+    print("\n--- Working with statistical maps ---")
     stat_counts = df.iloc[:, COL_WORKS_STAT].value_counts()
     for k, v in stat_counts.items():
         pct = (v / N) * 100
         print(f"  {str(k):<25} {v:>4}  ({pct:>5.2f}%)")
 
-    # ----- 1.6 LATA DOŚWIADCZENIA -----
-    section_header("1.6. Lata doświadczenia")
+    # ----- 1.6 YEARS OF EXPERIENCE -----
+    section_header("1.6. Years of experience")
 
     years_maps = [parse_years(v) for v in df.iloc[:, COL_YEARS_MAPS]]
     years_maps_clean = [y for y in years_maps if y is not None]
@@ -131,19 +131,19 @@ def main():
     def summarize(name, values, N_total):
         print(f"\n--- {name} ---")
         if not values:
-            print("  Brak danych")
+            print("  No data")
             return
-        print(f"  N (liczba udzielonych odp): {len(values)}/{N_total}")
-        print(f"  Średnia (mean): {np.mean(values):.2f}")
-        print(f"  Mediana:        {np.median(values):.2f}")
-        print(f"  Odch. std (SD): {np.std(values, ddof=1):.2f}")
+        print(f"  N (number of responses): {len(values)}/{N_total}")
+        print(f"  Mean:           {np.mean(values):.2f}")
+        print(f"  Median:         {np.median(values):.2f}")
+        print(f"  Std. dev (SD):  {np.std(values, ddof=1):.2f}")
         print(f"  Min:            {min(values):.2f}")
         print(f"  Max:            {max(values):.2f}")
 
-    summarize("Mapy ogółem", years_maps_clean, N)
-    summarize("Mapy statystyczne", years_stat_clean, N)
+    summarize("Maps overall", years_maps_clean, N)
+    summarize("Statistical maps", years_stat_clean, N)
 
-    print("\n--- Wartości tekstowe (sprowadzone do liczb) ---")
+    print("\n--- Text values (converted to numbers) ---")
     text_to_number = []
     for raw, parsed in zip(df.iloc[:, COL_YEARS_MAPS], years_maps):
         if not pd.isna(raw) and not isinstance(raw, (int, float)):
@@ -152,28 +152,28 @@ def main():
         if not pd.isna(raw) and not isinstance(raw, (int, float)):
             text_to_number.append((raw, parsed))
     if text_to_number:
-        # Usuń duplikaty zachowując kolejność
+        # Remove duplicates preserving order
         seen = set()
         for raw, parsed in text_to_number:
             key = str(raw).strip()
             if key not in seen:
                 seen.add(key)
-                print(f"  '{raw}'  →  {parsed}")
+                print(f"  '{raw}'  ->  {parsed}")
     else:
-        print("  (brak wartości tekstowych)")
+        print("  (no text values)")
 
-    # ----- 1.7 SAMOOCENA EKSPERCKA -----
-    section_header("1.7. Samoocena poziomu eksperckiego")
+    # ----- 1.7 SELF-ASSESSED EXPERTISE -----
+    section_header("1.7. Self-assessed expertise level")
     expertise = df.iloc[:, COL_SELF_EXPERT].dropna().tolist()
     print(f"\n  N: {len(expertise)}")
-    print(f"  Średnia: {np.mean(expertise):.2f}")
-    print(f"  Mediana: {np.median(expertise):.2f}")
-    print(f"  SD:      {np.std(expertise, ddof=1):.2f}")
-    print(f"\n--- Rozkład ocen ---")
+    print(f"  Mean:   {np.mean(expertise):.2f}")
+    print(f"  Median: {np.median(expertise):.2f}")
+    print(f"  SD:     {np.std(expertise, ddof=1):.2f}")
+    print(f"\n--- Score distribution ---")
     for lvl in [1, 2, 3, 4, 5]:
         cnt = sum(1 for e in expertise if e == lvl)
         pct = (cnt / N) * 100
-        print(f"  Ocena {lvl}: {cnt:>4}  ({pct:>5.2f}%)")
+        print(f"  Score {lvl}: {cnt:>4}  ({pct:>5.2f}%)")
 
 
 if __name__ == "__main__":

@@ -2,6 +2,11 @@
 __pycache__/
 *.py[codz]
 *$py.class
+.claude
+.idea
+*.parquet
+eurocarto2026/
+texts/
 
 # C extensions
 *.so

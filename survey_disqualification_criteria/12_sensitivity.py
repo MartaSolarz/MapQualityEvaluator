@@ -1,23 +1,23 @@
 """
 12_sensitivity.py
 ==================
-Sekcja "Analizy odporności", rozdz. 8 dokumentu Stan_prac.pdf:
-Analiza wrażliwości Quality Score na niepewność wag.
+"Robustness analyses" section, chapter 8 of the Stan_prac.pdf document:
+Sensitivity analysis of Quality Score to weight uncertainty.
 
-Dla każdego z sześciu scenariuszy testowych oblicza Quality Score zgodnie ze wzorem:
+For each of six test scenarios computes the Quality Score according to the formula:
 
-    Q = Q_max × (1 − P_norm)
-    P_norm = Σ w_i (naruszone) / Σ w_i (wszystkie)
+    Q = Q_max * (1 - P_norm)
+    P_norm = Sigma w_i (violated) / Sigma w_i (all)
 
-przy czterech alternatywnych zestawach wag:
-- orig  — empiryczne wagi w_i z ankiety
-- CI_lo — dolne 95% CI wag z bootstrap
-- CI_hi — górne 95% CI wag z bootstrap
-- równe — wszystkie wagi = 0.7 (baseline, jak wyglądałby model bez różnicowania)
+using four alternative weight sets:
+- orig  — empirical weights w_i from the survey
+- CI_lo — lower 95% CI of weights from bootstrap
+- CI_hi — upper 95% CI of weights from bootstrap
+- equal — all weights = 0.7 (baseline, how the model would look without differentiation)
 
-Przyjęto Q_max = 60 (zgodnie z dokumentem teoretycznym, przykład 1 i 2).
+Q_max = 60 is assumed (according to the theoretical document, examples 1 and 2).
 
-Uruchomienie:
+Run:
     python 12_sensitivity.py
 """
 import numpy as np
@@ -27,12 +27,12 @@ from importlib import import_module
 
 def quality_score(violated_ids, weights, Qmax=60):
     """
-    Oblicz Quality Score dla mapy naruszającej zbiór kryteriów.
+    Compute Quality Score for a map violating a set of criteria.
 
     Args:
-        violated_ids: list[str] — np. ['D2', 'A1']
-        weights: dict {crit_id: float} — wagi w_i
-        Qmax: float — górny pułap Stage 1
+        violated_ids: list[str] — e.g. ['D2', 'A1']
+        weights: dict {crit_id: float} — weights w_i
+        Qmax: float — Stage 1 upper bound
 
     Returns:
         float — Q
@@ -43,14 +43,14 @@ def quality_score(violated_ids, weights, Qmax=60):
     return Qmax * (1 - P_norm)
 
 
-# Scenariusze testowe (zgodne z PDF)
+# Test scenarios (consistent with PDF)
 SCENARIOS = [
-    {'name': 'Brak L3',                          'violations': ['L3']},
-    {'name': 'Brak D2 + A1 (przykład 2 z teorii)','violations': ['D2', 'A1']},
-    {'name': 'Brak D1',                          'violations': ['D1']},
-    {'name': 'Brak L1 + L3',                     'violations': ['L1', 'L3']},
-    {'name': 'Brak V1 + V2',                     'violations': ['V1', 'V2']},
-    {'name': 'Brak D1 + L2 + V2 (najgorsze)',    'violations': ['D1', 'L2', 'V2']},
+    {'name': 'Missing L3',                              'violations': ['L3']},
+    {'name': 'Missing D2 + A1 (example 2 from theory)', 'violations': ['D2', 'A1']},
+    {'name': 'Missing D1',                              'violations': ['D1']},
+    {'name': 'Missing L1 + L3',                         'violations': ['L1', 'L3']},
+    {'name': 'Missing V1 + V2',                         'violations': ['V1', 'V2']},
+    {'name': 'Missing D1 + L2 + V2 (worst case)',       'violations': ['D1', 'L2', 'V2']},
 ]
 
 
@@ -58,29 +58,29 @@ def main():
     ratings, _ = load_ratings()
     Qmax = 60
 
-    # Pobierz bootstrap CI z modułu 06
+    # Get bootstrap CI from module 06
     mod06 = import_module('06_bootstrap')
     boot = mod06.bootstrap_weights(ratings, n_iter=10000, seed=42)
 
-    # Cztery zestawy wag
+    # Four weight sets
     w_orig  = {cid: boot[cid]['w']     for cid in CRIT_IDS}
     w_lo    = {cid: boot[cid]['ci_lo'] for cid in CRIT_IDS}
     w_hi    = {cid: boot[cid]['ci_hi'] for cid in CRIT_IDS}
     w_equal = {cid: 0.7                for cid in CRIT_IDS}
 
     print("="*100)
-    print(f"Analiza wrażliwości Quality Score (Q_max = {Qmax})")
+    print(f"Sensitivity analysis of Quality Score (Q_max = {Qmax})")
     print("="*100)
 
-    print("\nSumy wag w czterech zestawach:")
-    print(f"  Σ w (orig):   {sum(w_orig.values()):.2f}")
-    print(f"  Σ w (CI_lo):  {sum(w_lo.values()):.2f}")
-    print(f"  Σ w (CI_hi):  {sum(w_hi.values()):.2f}")
-    print(f"  Σ w (równe):  {sum(w_equal.values()):.2f}")
+    print("\nWeight sums for the four sets:")
+    print(f"  Sigma w (orig):   {sum(w_orig.values()):.2f}")
+    print(f"  Sigma w (CI_lo):  {sum(w_lo.values()):.2f}")
+    print(f"  Sigma w (CI_hi):  {sum(w_hi.values()):.2f}")
+    print(f"  Sigma w (equal):  {sum(w_equal.values()):.2f}")
 
-    header = (f"{'Scenariusz':<40} {'Naruszone':<18} "
+    header = (f"{'Scenario':<40} {'Violated':<18} "
               f"{'Q (orig)':>10} {'Q (CI_lo)':>10} {'Q (CI_hi)':>10} "
-              f"{'Q (równe)':>10} {'Zakres':>8}")
+              f"{'Q (equal)':>10} {'Range':>8}")
     print("\n" + header)
     print('-' * len(header))
 
@@ -100,11 +100,11 @@ def main():
 
     print('-' * len(header))
 
-    print("\nWnioski:")
-    print("  • Zakres zmienności Q (różnica między scenariuszem CI_lo a CI_hi) jest niewielki")
-    print("    — wagi z bootstrap CI dają bardzo zbliżone wyniki.")
-    print("  • Model z empirycznymi wagami daje istotnie inne wyniki niż wagi równe — co potwierdza")
-    print("    praktyczną wartość różnicowania wag w modelu Stage 1.")
+    print("\nConclusions:")
+    print("  - The Q variability range (difference between CI_lo and CI_hi scenarios) is small")
+    print("    — bootstrap CI weights yield very similar results.")
+    print("  - The model with empirical weights gives significantly different results than equal weights — confirming")
+    print("    the practical value of weight differentiation in the Stage 1 model.")
 
 
 if __name__ == "__main__":

@@ -1,18 +1,17 @@
 """
 09_friedman.py
 ===============
-Sekcja "Analizy odporności", rozdz. 5 dokumentu Stan_prac.pdf:
-Test Friedmana — czy kryteria różnią się istotnie.
+"Robustness analyses" section, chapter 5 of the Stan_prac.pdf document:
+Friedman test — whether criteria differ significantly.
 
-Test Friedmana jest nieparametrycznym odpowiednikiem analizy wariancji z
-powtarzanymi pomiarami. Testuje hipotezę zerową, że wszystkie 10 kryteriów
-są oceniane równie surowo (mediany rozkładów ocen są równe).
+The Friedman test is a non-parametric equivalent of repeated measures ANOVA.
+It tests the null hypothesis that all 10 criteria are rated equally severely
+(the medians of the rating distributions are equal).
 
-Jeśli H₀ zostanie odrzucona (p < 0.05), oznacza to, że kryteria różnią się
-istotnie — co uzasadnia architekturę modelu Stage 1 opartego na zróżnicowanych
-wagach.
+If H0 is rejected (p < 0.05), it means that criteria differ significantly —
+which justifies the Stage 1 model architecture based on differentiated weights.
 
-Uruchomienie:
+Run:
     python 09_friedman.py
 """
 import numpy as np
@@ -24,49 +23,49 @@ def main():
     ratings, _ = load_ratings()
 
     print("="*70)
-    print("Test Friedmana — czy kryteria różnią się w surowości oceny")
+    print("Friedman test — whether criteria differ in rating severity")
     print("="*70)
 
-    # scipy.stats.friedmanchisquare przyjmuje serie ocen — jedną serię per kryterium.
-    # Każda seria to oceny wszystkich respondentów dla tego kryterium.
+    # scipy.stats.friedmanchisquare takes rating series — one series per criterion.
+    # Each series is the ratings of all respondents for that criterion.
     series = [ratings[:, i] for i in range(10)]
     chi2, p = stats.friedmanchisquare(*series)
 
-    print(f"\n  H₀: wszystkie 10 kryteriów ma równą medianę ocen")
-    print(f"  H₁: przynajmniej jedno kryterium różni się od pozostałych")
+    print(f"\n  H0: all 10 criteria have equal median ratings")
+    print(f"  H1: at least one criterion differs from the rest")
     print()
-    print(f"  Statystyka chi-square: {chi2:.4f}")
-    print(f"  Stopnie swobody (df):   9  (k - 1, gdzie k = 10 kryteriów)")
+    print(f"  Chi-square statistic: {chi2:.4f}")
+    print(f"  Degrees of freedom (df):  9  (k - 1, where k = 10 criteria)")
     if p < 1e-6:
         p_str = "< 0.000001"
     else:
         p_str = f"{p:.6f}"
-    print(f"  Wartość p:              {p_str}")
+    print(f"  p-value:                  {p_str}")
 
     print()
     if p < 0.05:
-        print("  Wniosek: H₀ odrzucona — kryteria różnią się istotnie w surowości oceny.")
-        print("  Implikacja: architektura modelu Stage 1 z indywidualnymi wagami w_i")
-        print("              jest empirycznie uzasadniona.")
+        print("  Conclusion: H0 rejected — criteria differ significantly in rating severity.")
+        print("  Implication: the Stage 1 model architecture with individual weights w_i")
+        print("               is empirically justified.")
     else:
-        print("  Wniosek: brak podstaw do odrzucenia H₀.")
+        print("  Conclusion: no grounds to reject H0.")
 
-    # Dodatkowa informacja: średnie rangi per kryterium
-    print("\n--- Średnie rangi per kryterium (rosnąco) ---")
-    # Dla każdego respondenta uszereguj kryteria (rangi 1..10 wewnątrz wiersza)
-    # Wyższa ranga = wyższa ocena.
+    # Additional information: mean ranks per criterion
+    print("\n--- Mean ranks per criterion (ascending) ---")
+    # For each respondent rank the criteria (ranks 1..10 within a row)
+    # Higher rank = higher rating.
     N = ratings.shape[0]
     ranks_per_resp = np.zeros_like(ratings)
     for j in range(N):
-        # method='average' obsługuje tied values poprawnie
+        # method='average' handles tied values correctly
         ranks_per_resp[j] = stats.rankdata(ratings[j], method='average')
     mean_ranks = ranks_per_resp.mean(axis=0)
 
     order = np.argsort(mean_ranks)
-    print(f"\n{'ID':<4} {'Mean rank':>10}  Kryterium")
+    print(f"\n{'ID':<4} {'Mean rank':>10}  Criterion")
     print('-' * 70)
     for i in order:
-        print(f"{CRIT_IDS[i]:<4} {mean_ranks[i]:>10.3f}  {CRITERIA[i]['name_short_pl']}")
+        print(f"{CRIT_IDS[i]:<4} {mean_ranks[i]:>10.3f}  {CRITERIA[i]['name_short_en']}")
 
 
 if __name__ == "__main__":

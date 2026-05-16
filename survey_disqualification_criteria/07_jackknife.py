@@ -1,20 +1,20 @@
 """
 07_jackknife.py
 ================
-Sekcja "Analizy odporności", rozdz. 2 dokumentu Stan_prac.pdf:
-Jackknife (leave-one-out) — wpływ pojedynczego respondenta na wagi.
+"Robustness analyses" section, chapter 2 of the Stan_prac.pdf document:
+Jackknife (leave-one-out) — impact of a single respondent on weights.
 
-Metoda: dla każdego z 10 kryteriów obliczamy wagę w_i N razy, za każdym razem
-pomijając jednego respondenta z próby. Pozwala to zidentyfikować, czy któryś
-respondent dysproporcjonalnie wpływa na uzyskaną wagę (odstająca obserwacja).
+Method: for each of the 10 criteria we compute the weight w_i N times, each time
+omitting one respondent from the sample. This allows identifying whether any
+respondent disproportionately influences the obtained weight (outlying observation).
 
-Dla każdego kryterium podajemy:
-- w_i (pełne) — waga z pełnej próby N = 25
-- jk_min, jk_max — zakres wag z jackknife (po pominięciu jednego respondenta)
-- max_change — maksymalna zmiana |w_i_jk - w_i_full|
-- most_influential_resp — indeks respondenta o największym wpływie
+For each criterion we report:
+- w_i (full) — weight from the full sample N = 25
+- jk_min, jk_max — range of jackknife weights (after omitting one respondent)
+- max_change — maximum change |w_i_jk - w_i_full|
+- most_influential_resp — index of the most influential respondent
 
-Uruchomienie:
+Run:
     python 07_jackknife.py
 """
 import numpy as np
@@ -23,7 +23,7 @@ from data_loader import load_ratings, CRITERIA, CRIT_IDS, COL_COUNTRY
 
 def jackknife_weights(ratings):
     """
-    Procedura leave-one-out dla każdego kryterium.
+    Leave-one-out procedure for each criterion.
 
     Returns:
         dict {crit_id: {'w_full', 'jk_min', 'jk_max', 'max_change',
@@ -60,10 +60,10 @@ def main():
     jk = jackknife_weights(ratings)
 
     print("="*90)
-    print("Jackknife (leave-one-out) — wpływ pojedynczego respondenta na wagi w_i")
+    print("Jackknife (leave-one-out) — impact of a single respondent on weights w_i")
     print("="*90)
-    header = (f"{'ID':<4} {'w (pełne)':>10} {'jk_min':>8} {'jk_max':>8} "
-              f"{'Maks. zmiana':>14}  {'Wpływowy respondent':<30}")
+    header = (f"{'ID':<4} {'w (full)':>10} {'jk_min':>8} {'jk_max':>8} "
+              f"{'Max change':>14}  {'Influential respondent':<30}")
     print(header)
     print('-' * len(header))
 
@@ -75,9 +75,9 @@ def main():
               f"{r['max_change']:>14.3f}  #{resp_idx} ({resp_country})")
 
     max_changes = [jk[c]['max_change'] for c in CRIT_IDS]
-    print(f"\nZakres maksymalnych zmian: {min(max_changes):.3f} – {max(max_changes):.3f}")
-    print("(Bardzo małe wartości oznaczają, że żaden pojedynczy respondent")
-    print(" nie zmienia istotnie uzyskanej wagi dyskwalifikującej.)")
+    print(f"\nRange of maximum changes: {min(max_changes):.3f} - {max(max_changes):.3f}")
+    print("(Very small values indicate that no single respondent")
+    print(" significantly changes the obtained disqualification weight.)")
 
 
 if __name__ == "__main__":

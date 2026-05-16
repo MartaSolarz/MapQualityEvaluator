@@ -1,20 +1,20 @@
 """
 06_bootstrap.py
 ================
-Sekcja "Analizy odporności", rozdz. 1 dokumentu Stan_prac.pdf:
-Bootstrap 95% CI dla wag dyskwalifikujących oraz dla Krippendorff's alpha.
+"Robustness analyses" section, chapter 1 of the Stan_prac.pdf document:
+Bootstrap 95% CI for disqualification weights and for Krippendorff's alpha.
 
-Metoda: w każdej iteracji losujemy ze zwracaniem N = 25 respondentów z oryginalnej próby
-i obliczamy wagi (oraz α). Po wszystkich iteracjach wyznaczamy 95% CI jako 2.5. i 97.5.
-percentyl rozkładu bootstrapowego.
+Method: in each iteration we sample with replacement N = 25 respondents from the original sample
+and compute weights (and alpha). After all iterations we determine the 95% CI as the 2.5th and 97.5th
+percentile of the bootstrap distribution.
 
-Liczby iteracji:
-- 10 000 dla wag (szybkie, czysta arytmetyka średnich)
-- 1 000 dla α (wolniejsze, każda iteracja to pełne wyliczenie Krippendorff α)
+Number of iterations:
+- 10,000 for weights (fast, pure arithmetic of means)
+- 1,000 for alpha (slower, each iteration is a full Krippendorff alpha computation)
 
-Seed: 42 (deterministyczna replikacja).
+Seed: 42 (deterministic replication).
 
-Uruchomienie:
+Run:
     python 06_bootstrap.py
 """
 import numpy as np
@@ -24,15 +24,15 @@ from data_loader import load_ratings, CRITERIA, CRIT_IDS
 
 def bootstrap_weights(ratings, n_iter=10000, seed=42):
     """
-    Bootstrap 95% CI dla wag w_i = (mean - 1) / 4.
+    Bootstrap 95% CI for weights w_i = (mean - 1) / 4.
 
     Returns:
         dict {crit_id: {'w': float, 'se': float, 'ci_lo': float, 'ci_hi': float}}
 
-    Uwaga: używamy starszego API np.random.seed + np.random.choice dla
-    zachowania zgodności z wartościami w Stan_prac.pdf. Nowszy generator
-    (np.random.default_rng) dawałby liczby różniące się o ±0.01 z powodu
-    innej sekwencji liczb losowych.
+    Note: we use the older API np.random.seed + np.random.choice to
+    maintain consistency with the values in Stan_prac.pdf. The newer generator
+    (np.random.default_rng) would yield numbers differing by +/-0.01 due to
+    a different random number sequence.
     """
     np.random.seed(seed)
     N = ratings.shape[0]
@@ -56,20 +56,20 @@ def bootstrap_weights(ratings, n_iter=10000, seed=42):
 
 def bootstrap_alpha(ratings, n_iter=1000, seed=42, level='ordinal'):
     """
-    Bootstrap 95% CI dla Krippendorff's alpha.
+    Bootstrap 95% CI for Krippendorff's alpha.
 
     Returns:
         dict {'value', 'mean_boot', 'sd_boot', 'ci_lo', 'ci_hi'}
 
-    Uwaga: starsze API (np.random.seed + np.random.choice) używamy dla
-    zachowania zgodności z wartościami w Stan_prac.pdf.
+    Note: we use the older API (np.random.seed + np.random.choice) to
+    maintain consistency with the values in Stan_prac.pdf.
     """
     np.random.seed(seed)
     N = ratings.shape[0]
     alphas = []
     for b in range(n_iter):
         idx = np.random.choice(N, N, replace=True)
-        rel_b = ratings[idx].T  # 10 wierszy × N kolumn
+        rel_b = ratings[idx].T  # 10 rows x N columns
         try:
             a = krippendorff.alpha(reliability_data=rel_b, level_of_measurement=level)
             alphas.append(a)
@@ -92,13 +92,13 @@ def main():
     ratings, _ = load_ratings()
 
     print("="*70)
-    print("Bootstrap 95% CI dla wag dyskwalifikujących w_i")
-    print("(n_iter = 10 000, seed = 42)")
+    print("Bootstrap 95% CI for disqualification weights w_i")
+    print("(n_iter = 10,000, seed = 42)")
     print("="*70)
 
     results = bootstrap_weights(ratings, n_iter=10000, seed=42)
 
-    header = f"{'ID':<4} {'w_i':>6} {'SE':>6} {'CI dolne':>10} {'CI górne':>10} {'Szerokość CI':>14}"
+    header = f"{'ID':<4} {'w_i':>6} {'SE':>6} {'CI lower':>10} {'CI upper':>10} {'CI width':>14}"
     print(header)
     print('-' * len(header))
     for cid in CRIT_IDS:
@@ -108,19 +108,19 @@ def main():
               f"{r['ci_lo']:>10.3f} {r['ci_hi']:>10.3f} {width:>14.3f}")
 
     widths = [results[c]['ci_hi'] - results[c]['ci_lo'] for c in CRIT_IDS]
-    print(f"\nZakres szerokości CI: {min(widths):.3f} – {max(widths):.3f}")
+    print(f"\nCI width range: {min(widths):.3f} - {max(widths):.3f}")
 
     print("\n" + "="*70)
-    print("Bootstrap 95% CI dla Krippendorff's alpha (ordinal)")
+    print("Bootstrap 95% CI for Krippendorff's alpha (ordinal)")
     print("(n_iter = 1000, seed = 42)")
     print("="*70)
 
     alpha_res = bootstrap_alpha(ratings, n_iter=1000, seed=42)
-    print(f"\n  Oryginalna α:           {alpha_res['value']:.4f}")
-    print(f"  Średnia bootstrapowa:   {alpha_res['mean_boot']:.4f}")
-    print(f"  SD bootstrap:           {alpha_res['sd_boot']:.4f}")
+    print(f"\n  Original alpha:         {alpha_res['value']:.4f}")
+    print(f"  Bootstrap mean:         {alpha_res['mean_boot']:.4f}")
+    print(f"  Bootstrap SD:           {alpha_res['sd_boot']:.4f}")
     print(f"  95% CI:                 [{alpha_res['ci_lo']:.4f}, {alpha_res['ci_hi']:.4f}]")
-    print(f"  Liczba udanych iteracji: {alpha_res['n_iter']}")
+    print(f"  Successful iterations:  {alpha_res['n_iter']}")
 
 
 if __name__ == "__main__":
