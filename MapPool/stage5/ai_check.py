@@ -88,16 +88,55 @@ def _call_claude_api(client, model, image_path, prompt, system_msg):
 
     response_text = message.content[0].text.strip()
 
-    # Strip markdown code fences if present
-    if response_text.startswith("```"):
-        # Remove first line (```json) and last line (```)
-        lines = response_text.split("\n")
-        response_text = "\n".join(lines[1:])
-        if response_text.endswith("```"):
-            response_text = response_text[:-3].strip()
-
-    parsed = json.loads(response_text)
+    parsed = _extract_json(response_text)
     return parsed, message.usage.input_tokens, message.usage.output_tokens
+
+
+def _extract_json(text):
+    """
+    Robustly extract JSON from VLM response.
+    Handles: markdown fences, trailing text after JSON, truncated descriptions.
+    """
+    text = text.strip()
+
+    # Strip markdown code fences if present
+    if text.startswith("```"):
+        lines = text.split("\n")
+        text = "\n".join(lines[1:])
+        # Find closing fence
+        if "```" in text:
+            text = text[:text.rfind("```")].strip()
+
+    # Try direct parse first
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Find first { and try to find matching }
+    start = text.find("{")
+    if start == -1:
+        raise json.JSONDecodeError("No JSON object found", text, 0)
+
+    # Try progressively shorter substrings from the end
+    for end in range(len(text), start, -1):
+        if text[end - 1] == "}":
+            try:
+                return json.loads(text[start:end])
+            except json.JSONDecodeError:
+                continue
+
+    # Last resort: truncated brief_description -- try to close it
+    # Common pattern: {"key": "value", ..., "brief_description": "Some text that got cut
+    truncated = text[start:]
+    # Try adding closing quote + }
+    for suffix in ['"}', '"}']:
+        try:
+            return json.loads(truncated + suffix)
+        except json.JSONDecodeError:
+            continue
+
+    raise json.JSONDecodeError("Could not extract valid JSON", text, 0)
 
 
 def _check_single_image(client, model, uid, image_path, image_width,
@@ -119,11 +158,11 @@ def _check_single_image(client, model, uid, image_path, image_width,
             status = "pass" if criteria_result["passes_all"] else "fail"
             return (uid, status, ai_response, criteria_result, in_tok, out_tok)
 
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
             if attempt < config.CLAUDE_RETRY_ATTEMPTS - 1:
                 time.sleep(config.CLAUDE_RETRY_DELAY)
                 continue
-            return (uid, "error", {"error": "JSON parse failed"}, {}, 0, 0)
+            return (uid, "error", {"error": "JSON parse failed", "detail": str(e)}, {}, 0, 0)
 
         except Exception as e:
             error_str = str(e)
