@@ -1,0 +1,24 @@
+# Database & WAL
+pipeline.db
+pipeline.db-shm
+pipeline.db-wal
+
+# Data files (large, on external drive or generated)
+full_data/
+results/
+thumbnails/
+dataset_export.csv
+predictions_clean.parquet
+
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Temp/working files
+recheck_changes.json
+run_abstract_pilot.sh
+todo.md
+

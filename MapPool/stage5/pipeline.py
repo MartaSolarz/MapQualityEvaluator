@@ -41,10 +41,12 @@ def load_all(pred_proba_min=None, exclude_domains=None):
     df = df[df["pred_proba"] >= pred_proba_min].copy()
     print(f"  After pred_proba >= {pred_proba_min}: {len(df):,}")
 
-    # Extract domain
-    df["domain"] = df["url"].apply(lambda u: urlparse(u).netloc)
+    # Use pre-computed domain column if available, otherwise parse
+    if "domain" not in df.columns:
+        df["domain"] = df["url"].apply(lambda u: urlparse(u).netloc.replace("www.", ""))
 
-    # Exclude domains
+    # Exclude domains (argument + config)
+    exclude_domains = exclude_domains | set(config.EXCLUDE_DOMAINS)
     if exclude_domains:
         df = df[~df["domain"].isin(exclude_domains)]
         print(f"  After excluding {len(exclude_domains)} domains: {len(df):,}")
@@ -111,10 +113,12 @@ def smart_sample(pred_proba_min=None, domain_cap=None, sample_target=None,
     df = df[df["pred_proba"] >= pred_proba_min].copy()
     print(f"  After pred_proba >= {pred_proba_min}: {len(df):,}")
 
-    # Extract domain
-    df["domain"] = df["url"].apply(lambda u: urlparse(u).netloc)
+    # Use pre-computed domain column if available, otherwise parse
+    if "domain" not in df.columns:
+        df["domain"] = df["url"].apply(lambda u: urlparse(u).netloc.replace("www.", ""))
 
-    # Exclude domains
+    # Exclude domains (argument + config)
+    exclude_domains = exclude_domains | set(config.EXCLUDE_DOMAINS)
     if exclude_domains:
         df = df[~df["domain"].isin(exclude_domains)]
         print(f"  After excluding {len(exclude_domains)} domains: {len(df):,}")
