@@ -55,10 +55,25 @@ def _prepare_image_base64(image_path, max_dim=None):
     return b64, "image/jpeg"
 
 
-def _call_claude_api(client, model, image_path, prompt, system_msg):
+def _build_cached_system(system_msg, prompt):
     """
-    Send one image to Claude Vision API.
-    Returns (parsed_response_dict, input_tokens, output_tokens).
+    Build system message with prompt caching.
+    System msg + full prompt are combined into a single cached block.
+    Haiku requires >= 4096 tokens for caching; Sonnet >= 1024.
+    """
+    return [
+        {
+            "type": "text",
+            "text": system_msg + "\n\n" + prompt,
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+
+
+def _call_claude_api(client, model, image_path, system_cached):
+    """
+    Send one image to Claude Vision API with prompt caching.
+    Returns (parsed_response_dict, input_tokens, output_tokens, cache_read, cache_creation).
     Raises on API or parse error.
     """
     b64, media_type = _prepare_image_base64(image_path)
@@ -66,7 +81,7 @@ def _call_claude_api(client, model, image_path, prompt, system_msg):
     message = client.messages.create(
         model=model,
         max_tokens=config.CLAUDE_MAX_TOKENS,
-        system=system_msg,
+        system=system_cached,
         messages=[{
             "role": "user",
             "content": [
@@ -80,7 +95,7 @@ def _call_claude_api(client, model, image_path, prompt, system_msg):
                 },
                 {
                     "type": "text",
-                    "text": prompt,
+                    "text": "Evaluate this image according to the criteria above. Respond with JSON only.",
                 },
             ],
         }],
@@ -89,7 +104,11 @@ def _call_claude_api(client, model, image_path, prompt, system_msg):
     response_text = message.content[0].text.strip()
 
     parsed = _extract_json(response_text)
-    return parsed, message.usage.input_tokens, message.usage.output_tokens
+
+    cache_read = getattr(message.usage, "cache_read_input_tokens", 0) or 0
+    cache_creation = getattr(message.usage, "cache_creation_input_tokens", 0) or 0
+
+    return parsed, message.usage.input_tokens, message.usage.output_tokens, cache_read, cache_creation
 
 
 def _extract_json(text):
@@ -140,15 +159,15 @@ def _extract_json(text):
 
 
 def _check_single_image(client, model, uid, image_path, image_width,
-                         image_height, prompt, system_msg):
+                         image_height, system_cached):
     """
     Check one image against formal criteria.
-    Returns (uid, ai_status, ai_response, criteria_result, input_tokens, output_tokens).
+    Returns (uid, ai_status, ai_response, criteria_result, input_tokens, output_tokens, cache_read, cache_creation).
     """
     for attempt in range(config.CLAUDE_RETRY_ATTEMPTS):
         try:
-            ai_response, in_tok, out_tok = _call_claude_api(
-                client, model, image_path, prompt, system_msg
+            ai_response, in_tok, out_tok, cache_read, cache_creation = _call_claude_api(
+                client, model, image_path, system_cached
             )
 
             # Evaluate criteria
@@ -156,13 +175,13 @@ def _check_single_image(client, model, uid, image_path, image_width,
             criteria_result = evaluate_all_criteria(ai_response, image_meta)
 
             status = "pass" if criteria_result["passes_all"] else "fail"
-            return (uid, status, ai_response, criteria_result, in_tok, out_tok)
+            return (uid, status, ai_response, criteria_result, in_tok, out_tok, cache_read, cache_creation)
 
         except json.JSONDecodeError as e:
             if attempt < config.CLAUDE_RETRY_ATTEMPTS - 1:
                 time.sleep(config.CLAUDE_RETRY_DELAY)
                 continue
-            return (uid, "error", {"error": "JSON parse failed", "detail": str(e)}, {}, 0, 0)
+            return (uid, "error", {"error": "JSON parse failed", "detail": str(e)}, {}, 0, 0, 0, 0)
 
         except Exception as e:
             error_str = str(e)
@@ -180,9 +199,9 @@ def _check_single_image(client, model, uid, image_path, image_width,
             if attempt < config.CLAUDE_RETRY_ATTEMPTS - 1:
                 time.sleep(config.CLAUDE_RETRY_DELAY)
                 continue
-            return (uid, "error", {"error": error_str}, {}, 0, 0)
+            return (uid, "error", {"error": error_str}, {}, 0, 0, 0, 0)
 
-    return (uid, "error", {"error": "max retries"}, {}, 0, 0)
+    return (uid, "error", {"error": "max retries"}, {}, 0, 0, 0, 0)
 
 
 def run_ai_check(pilot=None, model_override=None):
@@ -215,7 +234,7 @@ def run_ai_check(pilot=None, model_override=None):
     else:
         model = config.CLAUDE_MODEL_BULK   # Haiku for bulk
 
-    # Load prompt
+    # Load prompt and build cached system message
     prompt = load_prompt_template()
     system_msg = (
         "You are a rigorous cartographic analysis expert with deep knowledge of "
@@ -223,12 +242,14 @@ def run_ai_check(pilot=None, model_override=None):
         "dataset of statistical maps. Be strict — when in doubt, reject. "
         "Respond ONLY with the requested JSON structure."
     )
+    system_cached = _build_cached_system(system_msg, prompt)
 
     # Get pending images
     conn = db.get_connection()
     pending = db.get_pending(conn, "ai_check", limit=pilot)
     print(f"  Images to check: {len(pending):,}")
     print(f"  Model: {model}")
+    print(f"  Prompt caching: enabled (system + prompt in cached block)")
 
     if not pending:
         print("  Nothing to do.")
@@ -237,7 +258,7 @@ def run_ai_check(pilot=None, model_override=None):
 
     mode = "pilot" if pilot else "bulk"
     run_id = db.start_run(conn, f"ai_check_{mode}", params={
-        "model": model, "count": len(pending),
+        "model": model, "count": len(pending), "caching": True,
     })
 
     passed = 0
@@ -245,6 +266,8 @@ def run_ai_check(pilot=None, model_override=None):
     errors = 0
     total_input_tokens = 0
     total_output_tokens = 0
+    total_cache_read = 0
+    total_cache_creation = 0
 
     # Process with controlled concurrency
     with ThreadPoolExecutor(max_workers=config.CLAUDE_WORKERS) as executor:
@@ -261,13 +284,13 @@ def run_ai_check(pilot=None, model_override=None):
                 _check_single_image, client, model,
                 row["uid"], image_path,
                 row["image_width"], row["image_height"],
-                prompt, system_msg
+                system_cached
             )
             futures[future] = row["uid"]
 
         for future in tqdm(as_completed(futures), total=len(futures),
                            desc=f"AI check ({mode})"):
-            uid, status, ai_response, criteria_result, in_tok, out_tok = future.result()
+            uid, status, ai_response, criteria_result, in_tok, out_tok, cache_read, cache_creation = future.result()
 
             db.update_ai_status(
                 conn, uid, status,
@@ -280,6 +303,8 @@ def run_ai_check(pilot=None, model_override=None):
 
             total_input_tokens += in_tok
             total_output_tokens += out_tok
+            total_cache_read += cache_read
+            total_cache_creation += cache_creation
 
             if status == "pass":
                 passed += 1
@@ -291,17 +316,29 @@ def run_ai_check(pilot=None, model_override=None):
     total = passed + failed_criteria + errors
     cost_in = total_input_tokens / 1_000_000
     cost_out = total_output_tokens / 1_000_000
+    cost_cache_read = total_cache_read / 1_000_000
+    cost_cache_write = total_cache_creation / 1_000_000
 
-    # Rough cost estimate (Haiku rates)
+    # Cost estimate with caching
     if "haiku" in model:
-        est_cost = cost_in * 1.0 + cost_out * 5.0
+        base_rate_in, base_rate_out = 1.0, 5.0
     else:
-        est_cost = cost_in * 3.0 + cost_out * 15.0
+        base_rate_in, base_rate_out = 3.0, 15.0
+
+    est_cost = (
+        cost_in * base_rate_in +           # uncached input (image + short user text)
+        cost_out * base_rate_out +          # output
+        cost_cache_read * base_rate_in * 0.1 +   # cached reads (90% discount)
+        cost_cache_write * base_rate_in * 1.25    # cache writes (25% premium)
+    )
+
+    cache_pct = total_cache_read / (total_cache_read + total_cache_creation + total_input_tokens) * 100 if (total_cache_read + total_cache_creation + total_input_tokens) > 0 else 0
 
     db.finish_run(conn, run_id, processed=total, success=passed,
                   failed=failed_criteria + errors,
                   notes=f"pass={passed}, fail={failed_criteria}, error={errors}, "
                         f"tokens_in={total_input_tokens}, tokens_out={total_output_tokens}, "
+                        f"cache_read={total_cache_read}, cache_write={total_cache_creation}, "
                         f"est_cost=${est_cost:.2f}")
     conn.close()
 
@@ -310,6 +347,8 @@ def run_ai_check(pilot=None, model_override=None):
     print(f"    Fail:   {failed_criteria:,}")
     print(f"    Error:  {errors:,}")
     print(f"  Tokens:")
-    print(f"    Input:  {total_input_tokens:,}")
-    print(f"    Output: {total_output_tokens:,}")
+    print(f"    Input:       {total_input_tokens:,}")
+    print(f"    Output:      {total_output_tokens:,}")
+    print(f"    Cache read:  {total_cache_read:,} ({cache_pct:.1f}% cache hit)")
+    print(f"    Cache write: {total_cache_creation:,}")
     print(f"  Estimated cost: ${est_cost:.2f}")

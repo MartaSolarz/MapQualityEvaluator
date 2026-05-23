@@ -61,6 +61,10 @@ Set both to `true` ONLY if the map shows **numerical, measurable data** such as:
 - **No legend visible** but units show a clear **ordered color gradient** that plausibly represents statistical data (population, economic indicator) → accept.
 - **No legend visible** and context unclear whether data is statistical or physical/meteorological → reject (when in doubt, reject).
 - Map showing statistical data **plus** qualitative overlay (labels, category names) → accept.
+- **Pest risk forecast maps**, drought outlook maps, flood risk maps with ordinal levels (low/moderate/high/extreme) → reject. These are hazard assessment categories, not statistical data.
+- **Index maps** (e.g., Human Development Index, Gini coefficient, corruption index) → accept. These are composite scores derived from statistical data, even if the index value itself is unitless.
+- Maps showing **count data per unit** (e.g., number of hospitals per province, number of species per region) → accept. Raw counts are statistical data.
+- Maps showing **change or trend** (e.g., population growth rate 2010-2020, % change in GDP) → accept.
 
 ### Sub-question 3: Is the data referenced to ADMINISTRATIVE or STATISTICAL UNITS? (`has_admin_units`)
 
@@ -78,17 +82,19 @@ Examples of valid units (accept):
 
 **Reject** (`has_admin_units = false`) if the spatial units are:
 - **Regular geometric grids** (square cells, rectangular tiles, pixel-based rasters)
-- **Hexagonal bins** (hex grids, H3 cells)
+- **Hexagonal bins / hex grids** — maps where the territory is divided into uniform hexagonal cells instead of real administrative boundaries. Each hexagon may represent an equal-area unit, a single electoral vote, a constituency, etc. Even if the hexagons are labeled with state abbreviations, **if the shapes are regular hexagons (not real geographic outlines), reject**. This includes hex tile maps / hex cartograms of countries or states.
 - **Arbitrary Voronoi polygons** or Thiessen polygons not tied to administrative boundaries
 - **Buffers, isochrones, or catchment areas** computed around points
 - **Natural/physical regions** only (watersheds, biomes, climate zones) — UNLESS they are also used as statistical reporting units
 - **Point locations** without any area/polygon boundaries (dot maps, individual city markers)
-- **Isoline-based zones** — areas between contour lines (isolines) that are color-filled. In these maps, the colored areas are NOT administrative units but interpolated zones between lines of equal value. Even though they may look like colored polygons, they are NOT referenced to administrative boundaries → reject.
+- **Isoline-based zones** — areas between contour lines (isolines) that are color-filled. The boundaries between colored zones are **smooth, curved lines** (not angular administrative borders). These are interpolated surfaces, NOT administrative units. Common examples: disease incidence surfaces, temperature maps, pollution maps where colors blend gradually across smooth curves. Even if the underlying data was collected per admin unit, if the **visual boundaries on the map are smooth curves rather than administrative borders** → reject.
 
 **Edge case guidance:**
 - Postal code areas → accept (they are real-world administrative divisions)
 - Grid-based population density raster → reject (geometric grid, not admin units)
 - Map showing data per country but with no visible internal boundaries → accept (countries are admin units)
+- Hexagonal tile map of US states (each state = one hexagon) → **reject** (geometry is artificial, not real borders)
+- Map of France with smooth color gradients and curved boundaries between zones → **reject** (isoline-based interpolation, not admin units)
 
 ## Criterion F4: Presentation Method
 
@@ -109,8 +115,13 @@ Set `has_choropleth = true` if:
 Set `has_choropleth = false` if:
 - Areas are colored only to distinguish categories (e.g., countries on a political map) without representing numerical data
 - Areas are all the same color or only serve as a base map background
-- The colored zones are bounded by **smooth curves (isolines/contour lines)** rather than administrative boundaries — this is an isoline map, not a choropleth
-- It is a **cartogram** — a map where the **shapes or sizes of geographic units are intentionally distorted** so that area becomes proportional to a data value (e.g., countries bloated or shrunken based on population). In a cartogram, the geometry itself encodes the data, NOT the color fill. Even if a cartogram uses different colors, it is NOT a choropleth. Cartograms are recognizable by their **warped, unnatural geography** — borders look stretched, squished, or rearranged compared to a normal map.
+- The colored zones are bounded by **smooth curves (isolines/contour lines)** rather than administrative boundaries — this is an isoline map, not a choropleth. Look carefully: if the color boundaries follow gentle curves rather than angular political borders, it is an isoline/interpolation map → reject.
+- It is a **cartogram** — a map where the **shapes or sizes of geographic units are intentionally distorted** so that area becomes proportional to a data value. Types of cartograms to reject:
+  - **Contiguous cartograms** — real borders are warped/stretched so unit areas represent data values. Countries look bloated or shrunken, borders are distorted but still connected.
+  - **Non-contiguous cartograms** — units are resized and may float apart, not touching neighbors.
+  - **Dorling cartograms** — each unit replaced by a circle, sized by data value, arranged roughly in geographic position.
+  - **Hex tile cartograms / tile grid maps** — each unit replaced by an identical hexagon or square tile. The geography is completely replaced by a regular grid layout. Even if tiles are labeled with real place names (e.g., state abbreviations), the **uniform tile shapes** prove it is a cartogram, not a choropleth → reject.
+  In ALL cartogram types, the geometry encodes data — NOT the color fill. Even if colored, it is NOT a choropleth.
 
 ### Method B: CIRCLE DIAGRAMS — proportional/graduated symbols (`has_proportional_circles`, `has_graduated_circles`, `has_structural_circles`)
 
@@ -138,7 +149,7 @@ We accept **only circular symbols** (circles, discs, pie charts). Symbols of oth
 - **Heat maps / continuous surface interpolations** (kernel density, IDW)
 - **Arrow or flow symbols** (showing direction/magnitude of movement)
 - **Point markers or pins** (showing locations without size variation)
-- **Cartograms** — maps where geographic shapes are **intentionally distorted, resized, or morphed** so that the area of each unit becomes proportional to a data value. Countries or regions appear bloated, shrunken, or deformed compared to their real geography. The data is encoded in the **geometry distortion**, not in color fill or symbols. Even if a cartogram uses colors, it is NOT a choropleth and does NOT qualify as any accepted method.
+- **Cartograms of any type** — contiguous (warped borders), non-contiguous (floating resized units), Dorling (circles in geographic layout), hex tile / tile grid (uniform hexagons or squares replacing real geography). In all cases, the geometry encodes data, and the map does NOT qualify as choropleth or any accepted method — even if colored.
 
 ## Response format
 
@@ -152,3 +163,4 @@ Important:
 - Set boolean fields to `true` or `false` (not strings)
 - `confidence`: set to "high" if you are very sure, "medium" if somewhat uncertain, "low" if guessing
 - `brief_description`: one sentence describing what the image actually shows
+- `map_language`: the primary language of text visible on the map (title, legend, labels). Use ISO 639-1 codes (e.g., "en", "fr", "de", "es", "zh", "ja", "ko", "pl"). If multiple languages, list the dominant one. If no text visible or language unidentifiable, use "unknown".

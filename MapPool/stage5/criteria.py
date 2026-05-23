@@ -110,6 +110,7 @@ def build_json_schema():
         schema[field_name] = "true/false"
     schema["confidence"] = "high/medium/low"
     schema["brief_description"] = "one-sentence description of what the image shows"
+    schema["map_language"] = "ISO 639-1 language code (e.g. en, fr, de) or unknown"
     return json.dumps(schema, indent=2)
 
 

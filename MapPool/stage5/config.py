@@ -20,15 +20,21 @@ if _env_file.exists():
 # --- Paths ---
 BASE_DIR = Path(__file__).parent
 PROJECT_ROOT = BASE_DIR.parent.parent
-PREDICTIONS_FILE = BASE_DIR.parent / "stage4" / "results" / "predictions_50M.parquet"
+PREDICTIONS_FILE = BASE_DIR / "full_data" / "predictions_clean.parquet"
 DB_PATH = BASE_DIR / "pipeline.db"
-IMAGE_CACHE_DIR = BASE_DIR / "images"
+IMAGE_CACHE_DIR = Path("/Volumes/PHD/phd/mappool_data/stage5_downloaded")
 PROMPT_TEMPLATE_PATH = BASE_DIR / "criteria_prompt.md"
 
 # --- Sampling ---
 PRED_PROBA_MIN = 0.70
 DOMAIN_CAP = 50
-SAMPLE_TARGET = 25_000
+SAMPLE_TARGET = 500_000  # high value to sample all candidates in one run (actual count limited by pred_proba + domain_cap)
+EXCLUDE_DOMAINS = [
+    "ville-data.com",         # 6 unique URLs, 104k duplicates -- no value
+    "files.airnowtech.org",   # air quality maps -- ordinal categories
+    "droughtmonitor.unl.edu", # drought maps -- ordinal categories
+]
+DEDUPLICATE_URLS = True  # normalize and deduplicate URLs before sampling
 STRATA = [
     # (low, high, fraction_of_target)
     (0.70, 0.80, 0.20),   # lower confidence — more diverse/lower quality

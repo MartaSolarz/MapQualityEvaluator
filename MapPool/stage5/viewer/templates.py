@@ -1,285 +1,10 @@
-#!/usr/bin/env python3
-"""
-Local viewer for stage5 AI check results.
-Supports filtering, sorting, resolution threshold, and dataset selection.
+"""HTML templates for the viewer."""
 
-Usage: python3 viewer.py [--port 8050]
-"""
-
-import sqlite3
 import json
-import argparse
 from pathlib import Path
-from http.server import HTTPServer, SimpleHTTPRequestHandler
-from urllib.parse import parse_qs, urlparse, urlencode
-import webbrowser
+from urllib.parse import urlencode
 
-DB_PATH = Path(__file__).parent / "pipeline.db"
-IMAGE_DIR = Path("/Volumes/PHD/phd/mappool_data/stage5_downloaded")
-
-PER_PAGE = 30
-THUMB_DIR = Path(__file__).parent / "thumbnails"
-THUMB_MAX = 400  # max dimension for thumbnails
-
-# In-memory cache for filter metadata (regenerated every 30s)
-import time as _time
-_meta_cache = {"data": None, "ts": 0}
-_stats_cache = {"key": None, "data": None, "ts": 0}
-_META_TTL = 30
-_STATS_TTL = 60
-
-
-def _make_thumbnail(src_path, thumb_path):
-    """Generate a JPEG thumbnail, cached on local disk."""
-    from PIL import Image
-    try:
-        img = Image.open(src_path)
-        if img.mode not in ("RGB", "L"):
-            img = img.convert("RGB")
-        img.thumbnail((THUMB_MAX, THUMB_MAX), Image.LANCZOS)
-        thumb_path.parent.mkdir(parents=True, exist_ok=True)
-        img.save(thumb_path, format="JPEG", quality=75)
-    except Exception:
-        # Fallback: copy original
-        import shutil
-        shutil.copy2(src_path, thumb_path)
-
-
-def _init_dataset_table():
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS dataset_selected (
-            uid TEXT PRIMARY KEY,
-            url TEXT,
-            domain TEXT,
-            pred_proba REAL,
-            image_width INTEGER,
-            image_height INTEGER,
-            local_path TEXT,
-            ai_status TEXT,
-            ai_is_map INTEGER,
-            ai_is_statistical_map INTEGER,
-            ai_has_quantitative_data INTEGER,
-            ai_has_admin_units INTEGER,
-            ai_has_choropleth INTEGER,
-            ai_has_proportional_circles INTEGER,
-            ai_has_graduated_circles INTEGER,
-            ai_has_structural_circles INTEGER,
-            ai_confidence TEXT,
-            ai_description TEXT,
-            ai_map_language TEXT,
-            passes_f3 INTEGER,
-            passes_f4 INTEGER,
-            passes_all INTEGER,
-            added_at TEXT DEFAULT (datetime('now'))
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-
-def _get_selected_uids():
-    conn = sqlite3.connect(str(DB_PATH))
-    uids = {r[0] for r in conn.execute("SELECT uid FROM dataset_selected")}
-    conn.close()
-    return uids
-
-
-def _add_to_dataset(uid):
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.execute("""
-        INSERT OR IGNORE INTO dataset_selected
-            (uid, url, domain, pred_proba, image_width, image_height, local_path,
-             ai_status, ai_is_map, ai_is_statistical_map,
-             ai_has_quantitative_data, ai_has_admin_units,
-             ai_has_choropleth, ai_has_proportional_circles,
-             ai_has_graduated_circles, ai_has_structural_circles,
-             ai_confidence, ai_description, ai_map_language,
-             passes_f3, passes_f4, passes_all)
-        SELECT uid, url, domain, pred_proba, image_width, image_height, local_path,
-               ai_status, ai_is_map, ai_is_statistical_map,
-               ai_has_quantitative_data, ai_has_admin_units,
-               ai_has_choropleth, ai_has_proportional_circles,
-               ai_has_graduated_circles, ai_has_structural_circles,
-               ai_confidence, ai_description, ai_map_language,
-               passes_f3, passes_f4, passes_all
-        FROM candidates WHERE uid = ?
-    """, (uid,))
-    conn.commit()
-    conn.close()
-
-
-def _remove_from_dataset(uid):
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.execute("DELETE FROM dataset_selected WHERE uid = ?", (uid,))
-    conn.commit()
-    conn.close()
-
-
-def get_filters_meta():
-    now = _time.time()
-    if _meta_cache["data"] and now - _meta_cache["ts"] < _META_TTL:
-        return _meta_cache["data"]
-
-    conn = sqlite3.connect(str(DB_PATH))
-    meta = {}
-
-    # Status
-    meta["status"] = {}
-    for r in conn.execute(
-        "SELECT ai_status, COUNT(*) FROM candidates WHERE download_status='success' GROUP BY ai_status"
-    ):
-        meta["status"][r[0] or "null"] = r[1]
-    meta["status"]["all"] = sum(meta["status"].values())
-
-    # Language
-    meta["language"] = {}
-    for r in conn.execute(
-        "SELECT ai_map_language, COUNT(*) FROM candidates "
-        "WHERE download_status='success' AND ai_map_language IS NOT NULL "
-        "GROUP BY ai_map_language ORDER BY COUNT(*) DESC"
-    ):
-        meta["language"][r[0]] = r[1]
-
-    # Confidence
-    meta["confidence"] = {}
-    for r in conn.execute(
-        "SELECT ai_confidence, COUNT(*) FROM candidates "
-        "WHERE download_status='success' AND ai_confidence IS NOT NULL "
-        "GROUP BY ai_confidence ORDER BY COUNT(*) DESC"
-    ):
-        meta["confidence"][r[0]] = r[1]
-
-    # Domains
-    meta["domains"] = {}
-    for r in conn.execute(
-        "SELECT domain, COUNT(*) FROM candidates "
-        "WHERE download_status='success' GROUP BY domain ORDER BY COUNT(*) DESC LIMIT 50"
-    ):
-        meta["domains"][r[0]] = r[1]
-
-    # Dataset selected count
-    meta["dataset_count"] = conn.execute("SELECT COUNT(*) FROM dataset_selected").fetchone()[0]
-
-    conn.close()
-    _meta_cache["data"] = meta
-    _meta_cache["ts"] = now
-    return meta
-
-
-def get_candidates(filters):
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-
-    conditions = ["download_status = 'success'"]
-    params = []
-
-    # Status
-    status = filters.get("status", "all")
-    if status and status != "all":
-        conditions.append("ai_status = ?")
-        params.append(status)
-
-    # Language
-    lang = filters.get("lang")
-    if lang:
-        conditions.append("ai_map_language = ?")
-        params.append(lang)
-
-    # Confidence
-    confidence = filters.get("confidence")
-    if confidence:
-        conditions.append("ai_confidence = ?")
-        params.append(confidence)
-
-    # Methods (checkboxes -- OR logic)
-    methods = []
-    if filters.get("m_choro"):
-        methods.append("ai_has_choropleth = 1")
-    if filters.get("m_prop"):
-        methods.append("ai_has_proportional_circles = 1")
-    if filters.get("m_grad"):
-        methods.append("ai_has_graduated_circles = 1")
-    if filters.get("m_struct"):
-        methods.append("ai_has_structural_circles = 1")
-    if methods:
-        conditions.extend(methods)
-
-    # Domain
-    domain = filters.get("domain")
-    if domain:
-        conditions.append("domain = ?")
-        params.append(domain)
-
-    # F3 / F4
-    f3 = filters.get("f3")
-    if f3 == "1":
-        conditions.append("passes_f3 = 1")
-    elif f3 == "0":
-        conditions.append("passes_f3 = 0")
-
-    f4 = filters.get("f4")
-    if f4 == "1":
-        conditions.append("passes_f4 = 1")
-    elif f4 == "0":
-        conditions.append("passes_f4 = 0")
-
-    # Min resolution
-    min_w = filters.get("min_w")
-    if min_w and min_w.isdigit():
-        conditions.append("image_width >= ?")
-        params.append(int(min_w))
-    min_h = filters.get("min_h")
-    if min_h and min_h.isdigit():
-        conditions.append("image_height >= ?")
-        params.append(int(min_h))
-
-    # Search
-    search = filters.get("search")
-    if search:
-        conditions.append("ai_description LIKE ?")
-        params.append(f"%{search}%")
-
-    # Show only selected
-    only_selected = filters.get("selected")
-    if only_selected == "1":
-        conditions.append("uid IN (SELECT uid FROM dataset_selected)")
-
-    where = "WHERE " + " AND ".join(conditions)
-
-    # Sort
-    sort = filters.get("sort", "status")
-    order = {
-        "status": "CASE ai_status WHEN 'pass' THEN 0 WHEN 'fail' THEN 1 ELSE 2 END, pred_proba DESC",
-        "proba_desc": "pred_proba DESC",
-        "proba_asc": "pred_proba ASC",
-        "res_desc": "image_width * image_height DESC",
-        "res_asc": "image_width * image_height ASC",
-        "domain": "domain ASC, pred_proba DESC",
-        "lang": "ai_map_language ASC, pred_proba DESC",
-    }.get(sort, "pred_proba DESC")
-
-    # Pagination
-    page = int(filters.get("page", 1))
-    offset = (page - 1) * PER_PAGE
-
-    total = conn.execute(f"SELECT COUNT(*) FROM candidates {where}", params).fetchone()[0]
-
-    rows = conn.execute(f"""
-        SELECT uid, url, domain, pred_proba, image_width, image_height,
-               local_path, ai_status, ai_is_map, ai_is_statistical_map,
-               ai_has_quantitative_data, ai_has_admin_units,
-               ai_has_choropleth, ai_has_proportional_circles,
-               ai_has_graduated_circles, ai_has_structural_circles,
-               ai_confidence, ai_description, ai_map_language,
-               passes_f3, passes_f4, passes_all
-        FROM candidates
-        {where}
-        ORDER BY {order}
-        LIMIT {PER_PAGE} OFFSET {offset}
-    """, params).fetchall()
-    conn.close()
-    return [dict(r) for r in rows], total
+from .config import PER_PAGE
 
 
 def bool_icon(val):
@@ -626,7 +351,7 @@ new Chart(document.getElementById('chartDomains'), {{
 def _keep_filters(filters):
     """Build query string preserving shared filters (for tab switching)."""
     shared = {k: v for k, v in filters.items()
-              if k in ("status", "lang", "confidence", "domain", "f3", "f4", "selected") and v}
+              if k in ("status", "lang", "confidence", "domain", "f3", "f4", "selected", "batch_id") and v}
     return "?" + urlencode(shared) if shared else ""
 
 
@@ -637,7 +362,7 @@ def build_url(filters, **overrides):
     return "/?" + urlencode(p) if p else "/"
 
 
-def render_page(candidates, total, filters, meta, selected_uids, tab="viewer", stats_content=""):
+def render_page(candidates, total, filters, meta, selected_uids, tab="viewer", stats_content="", extra_content=""):
     cards_html = "\n".join(render_card(c, c["uid"] in selected_uids) for c in candidates) if candidates else ""
 
     page = int(filters.get("page", 1))
@@ -695,8 +420,7 @@ def render_page(candidates, total, filters, meta, selected_uids, tab="viewer", s
 
     # Tab-dependent parts
     is_viewer = tab == "viewer"
-    tab_viewer_class = "active" if is_viewer else ""
-    tab_stats_class = "active" if not is_viewer else ""
+    show_filters = tab in ("viewer", "stats")
     form_action = "/" if is_viewer else "/stats"
     reset_href = "/" if is_viewer else "/stats"
     ds_href = "/?selected=1" if is_viewer else "/stats?selected=1"
@@ -709,7 +433,7 @@ def render_page(candidates, total, filters, meta, selected_uids, tab="viewer", s
         viewer_row2 = f"""<div class="filter-row">
     <div class="fg">
         <label>Methods</label>
-        <div class="methods-group">
+        <div class="methods-row">
             <label><input type="checkbox" name="m_choro" value="1" {m_choro}> Choropleth</label>
             <label><input type="checkbox" name="m_prop" value="1" {m_prop}> Proportional</label>
             <label><input type="checkbox" name="m_grad" value="1" {m_grad}> Graduated</label>
@@ -748,6 +472,65 @@ def render_page(candidates, total, filters, meta, selected_uids, tab="viewer", s
 {cards_html}
 </div>
 {pagination}"""
+
+    # Build filter panel HTML (only for viewer/stats tabs)
+    filter_panel_html = ""
+    if show_filters:
+        batch_id = filters.get("batch_id", "")
+        batch_hidden = f'<input type="hidden" name="batch_id" value="{batch_id}">' if batch_id else ""
+        filter_panel_html = f"""<form class="filter-panel" method="GET" action="{form_action}">
+    {batch_hidden}
+    <div class="filter-row">
+        <div class="fg">
+            <label>Status</label>
+            <select name="status">
+                {"".join(f'<option value="{s}" {"selected" if s==status else ""}>{s.title()} ({meta["status"].get(s, 0)})</option>' for s in ["all", "pass", "fail", "error", "pending"])}
+            </select>
+        </div>
+        <div class="fg">
+            <label>Language</label>
+            <select name="lang">{lang_opts}</select>
+        </div>
+        <div class="fg">
+            <label>Confidence</label>
+            <select name="confidence">{conf_opts}</select>
+        </div>
+        <div class="fg">
+            <label>Domain</label>
+            <select name="domain">{dom_opts}</select>
+        </div>
+        <label class="ds-checkbox"><input type="checkbox" name="selected" value="1" {ds_checked}> Only selected to dataset ({meta["dataset_count"]})</label>
+    </div>
+    <div class="filter-row">
+        <div class="fg">
+            <label>F3</label>
+            <select name="f3">
+                <option value="">All</option>
+                <option value="1" {"selected" if cur_f3=="1" else ""}>Pass</option>
+                <option value="0" {"selected" if cur_f3=="0" else ""}>Fail</option>
+            </select>
+        </div>
+        <div class="fg">
+            <label>F4</label>
+            <select name="f4">
+                <option value="">All</option>
+                <option value="1" {"selected" if cur_f4=="1" else ""}>Pass</option>
+                <option value="0" {"selected" if cur_f4=="0" else ""}>Fail</option>
+            </select>
+        </div>
+        <div class="fg">
+            <label>Sort</label>
+            <select name="sort">{sort_opts}</select>
+        </div>
+    </div>
+    {viewer_row2}
+    <div class="filter-row">
+        <div class="filter-actions">
+            <button type="submit" class="btn btn-apply">Apply</button>
+            <a href="{reset_href}" class="btn-reset">Reset</a>
+        </div>
+    </div>
+</form>"""
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -794,12 +577,13 @@ def render_page(candidates, total, filters, meta, selected_uids, tab="viewer", s
     .fg input[type="text"] {{ width: 170px; }}
     .fg input[type="number"] {{ width: 75px; }}
 
-    .methods-group {{ display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }}
-    .methods-group label {{ font-size: 0.82em; color: #444; cursor: pointer;
-                            display: flex; align-items: center; gap: 4px;
-                            padding: 4px 8px; border-radius: 6px; transition: background 0.15s; }}
-    .methods-group label:hover {{ background: #f0f2f5; }}
-    .methods-group input {{ accent-color: #5c6bc0; }}
+    .methods-row {{ display: flex; gap: 14px; flex-wrap: wrap; }}
+    .methods-row label {{ font-size: 0.85em; cursor: pointer;
+                          display: flex; align-items: center; gap: 4px;
+                          padding: 5px 10px; border-radius: 6px;
+                          border: 1.5px solid #e1e5eb; transition: all 0.15s; }}
+    .methods-row label:hover {{ background: #f0f2f5; }}
+    .methods-row input {{ accent-color: #5c6bc0; }}
 
     .filter-actions {{ display: flex; gap: 8px; align-items: center; margin-left: auto; }}
     .btn {{ padding: 7px 18px; border: none; border-radius: 8px; cursor: pointer;
@@ -818,8 +602,9 @@ def render_page(candidates, total, filters, meta, selected_uids, tab="viewer", s
             border: 1.5px solid #e1e5eb; border-bottom: none;
             background: #e4e7ec; margin-top: 16px;
             transition: all 0.15s; }}
-    .tab:first-child {{ border-radius: 10px 0 0 0; border-right: none; }}
-    .tab:last-child {{ border-radius: 0 10px 0 0; }}
+    .tab {{ border-right: none; }}
+    .tab:first-child {{ border-radius: 10px 0 0 0; }}
+    .tab:last-child {{ border-radius: 0 10px 0 0; border-right: 1.5px solid #e1e5eb; }}
     .tab:hover {{ color: #5c6bc0; background: #f8f9fb; }}
     .tab.active {{ color: #1a1a2e; background: #fff; border-bottom: none;
                    position: relative; z-index: 1; }}
@@ -911,70 +696,18 @@ def render_page(candidates, total, filters, meta, selected_uids, tab="viewer", s
 </div>
 
 <div class="tabs">
-    <a href="/{tab_filters_qs}" class="tab {tab_viewer_class}">Viewer</a>
-    <a href="/stats{tab_filters_qs}" class="tab {tab_stats_class}">Stats</a>
+    <a href="/{tab_filters_qs}" class="tab {"active" if tab=="viewer" else ""}">Viewer</a>
+    <a href="/stats{tab_filters_qs}" class="tab {"active" if tab=="stats" else ""}">Stats</a>
+    <a href="/builder" class="tab {"active" if tab=="builder" else ""}">Builder</a>
+    <a href="/history" class="tab {"active" if tab=="history" else ""}">History</a>
 </div>
 
 <div class="main">
-<form class="filter-panel" method="GET" action="{form_action}">
-
-    <div class="filter-row">
-        <div class="fg">
-            <label>Status</label>
-            <select name="status">
-                {"".join(f'<option value="{s}" {"selected" if s==status else ""}>{s.title()} ({meta["status"].get(s, 0)})</option>' for s in ["all", "pass", "fail", "error", "pending"])}
-            </select>
-        </div>
-        <div class="fg">
-            <label>Language</label>
-            <select name="lang">{lang_opts}</select>
-        </div>
-        <div class="fg">
-            <label>Confidence</label>
-            <select name="confidence">{conf_opts}</select>
-        </div>
-        <div class="fg">
-            <label>Domain</label>
-            <select name="domain">{dom_opts}</select>
-        </div>
-        <label class="ds-checkbox"><input type="checkbox" name="selected" value="1" {ds_checked}> Only selected to dataset ({meta["dataset_count"]})</label>
-    </div>
-
-    <div class="filter-row">
-        <div class="fg">
-            <label>F3</label>
-            <select name="f3">
-                <option value="">All</option>
-                <option value="1" {"selected" if cur_f3=="1" else ""}>Pass</option>
-                <option value="0" {"selected" if cur_f3=="0" else ""}>Fail</option>
-            </select>
-        </div>
-        <div class="fg">
-            <label>F4</label>
-            <select name="f4">
-                <option value="">All</option>
-                <option value="1" {"selected" if cur_f4=="1" else ""}>Pass</option>
-                <option value="0" {"selected" if cur_f4=="0" else ""}>Fail</option>
-            </select>
-        </div>
-        <div class="fg">
-            <label>Sort</label>
-            <select name="sort">{sort_opts}</select>
-        </div>
-    </div>
-
-    {viewer_row2}
-
-    <div class="filter-row">
-        <div class="filter-actions">
-            <button type="submit" class="btn btn-apply">Apply</button>
-            <a href="{reset_href}" class="btn-reset">Reset</a>
-        </div>
-    </div>
-</form>
+{filter_panel_html}
 
 {viewer_content}
 {stats_content}
+{extra_content}
 </div>
 
 <script>
@@ -1017,114 +750,3 @@ function dsAction(uid, action) {{
 </script>
 </body>
 </html>"""
-
-
-class ViewerHandler(SimpleHTTPRequestHandler):
-    def do_GET(self):
-        parsed = urlparse(self.path)
-
-        if parsed.path.startswith("/images/"):
-            img_name = parsed.path.split("/")[-1]
-            thumb_path = THUMB_DIR / img_name
-            # Serve thumbnail if exists, otherwise generate it
-            if not thumb_path.exists():
-                src_path = IMAGE_DIR / img_name
-                if not src_path.exists():
-                    self.send_error(404)
-                    return
-                _make_thumbnail(src_path, thumb_path)
-            self.send_response(200)
-            self.send_header("Content-Type", "image/jpeg")
-            self.send_header("Cache-Control", "max-age=86400")
-            self.end_headers()
-            self.wfile.write(thumb_path.read_bytes())
-            return
-
-        # Full-size image (for click-to-open)
-        if parsed.path.startswith("/full/"):
-            img_name = parsed.path.split("/")[-1]
-            img_path = IMAGE_DIR / img_name
-            if img_path.exists():
-                self.send_response(200)
-                ext = img_path.suffix.lower()
-                ct = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-                      ".png": "image/png", ".gif": "image/gif",
-                      ".webp": "image/webp"}.get(ext, "application/octet-stream")
-                self.send_header("Content-Type", ct)
-                self.end_headers()
-                self.wfile.write(img_path.read_bytes())
-            else:
-                self.send_error(404)
-            return
-
-        params = parse_qs(parsed.query)
-        filters = {k: v[0] for k, v in params.items()}
-        meta = get_filters_meta()
-        selected_uids = _get_selected_uids()
-
-        if parsed.path == "/stats":
-            stats = get_stats_data(filters)
-            stats_content = render_stats_content(stats, filters, meta)
-            html = render_page([], 0, filters, meta, selected_uids, tab="stats", stats_content=stats_content)
-        else:
-            candidates, total = get_candidates(filters)
-            html = render_page(candidates, total, filters, meta, selected_uids, tab="viewer")
-
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(html.encode("utf-8"))
-
-    def do_POST(self):
-        parsed = urlparse(self.path)
-
-        if parsed.path == "/api/dataset":
-            length = int(self.headers.get("Content-Length", 0))
-            body = json.loads(self.rfile.read(length))
-            uid = body.get("uid")
-            action = body.get("action")
-
-            if action == "add":
-                _add_to_dataset(uid)
-            elif action == "remove":
-                _remove_from_dataset(uid)
-            _meta_cache["ts"] = 0  # invalidate cache
-
-            conn = sqlite3.connect(str(DB_PATH))
-            count = conn.execute("SELECT COUNT(*) FROM dataset_selected").fetchone()[0]
-            conn.close()
-
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"ok": True, "count": count}).encode())
-            return
-
-        self.send_error(404)
-
-    def log_message(self, format, *args):
-        pass
-
-
-def main():
-    _init_dataset_table()
-
-    parser = argparse.ArgumentParser(description="Stage 5 results viewer")
-    parser.add_argument("--port", type=int, default=8050)
-    args = parser.parse_args()
-
-    url = f"http://localhost:{args.port}"
-    print(f"Opening viewer at {url}")
-    print("Press Ctrl+C to stop.\n")
-
-    webbrowser.open(url)
-    server = HTTPServer(("localhost", args.port), ViewerHandler)
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\nStopped.")
-        server.server_close()
-
-
-if __name__ == "__main__":
-    main()
